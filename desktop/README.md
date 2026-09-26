@@ -25,9 +25,12 @@ vox://auth/callback
 ## Local development
 
 1. Copy `.env.example` to `.env` and fill public values.
-2. Allow `vox://auth/callback` in Supabase.
-3. Ensure Core has `SUPABASE_JWT_SECRET` set.
-4. Run:
+2. In Supabase Auth → URL configuration, allow **both**:
+   ```text
+   vox://auth/callback
+   http://127.0.0.1:17843/auth/callback
+   ```
+3. Run:
 
 ```sh
 cp .env.example .env
@@ -35,7 +38,9 @@ cp .env.example .env
 cd src-tauri && cargo tauri dev
 ```
 
-On macOS, deep links for a custom scheme are most reliable with an installed/bundled app under `/Applications`. Linux/Windows register the scheme at runtime in debug builds.
+Debug builds (`cargo tauri dev`) use the loopback URL automatically. macOS routes `vox://` to `/Applications/Vox.app`, so deep-link login does not reach the debug binary — the localhost callback fixes that. Release builds keep `vox://auth/callback`.
+
+Quit any other Vox window before signing in so port `17843` is free.
 
 Nothing secret to Vox servers (service tokens, host secrets, JWT signing keys) is shipped in the app.
 

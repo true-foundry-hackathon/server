@@ -20,6 +20,12 @@ const ACCOUNT: &str = "auth-session";
 const OAUTH_PENDING_ACCOUNT: &str = "oauth-pending";
 const OAUTH_SCHEME: &str = "vox";
 const OAUTH_PENDING_TTL_SECS: i64 = 600;
+/// Fixed loopback used by `cargo tauri dev` — macOS will not deliver `vox://` to the
+/// debug binary when `/Applications/Vox.app` owns the scheme.
+#[cfg(debug_assertions)]
+const DEV_OAUTH_LOOPBACK: &str = "http://127.0.0.1:17843/auth/callback";
+#[cfg(debug_assertions)]
+const DEV_OAUTH_PORT: u16 = 17843;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StoredSession {
@@ -161,8 +167,11 @@ impl AuthManager {
     }
 
     async fn finish_oauth_inner(&self, callback: &url::Url) -> Result<AuthState, String> {
-        if callback.scheme() != OAUTH_SCHEME {
-            return Err("Unexpected OAuth callback scheme".to_string());
+        if !is_allowed_oauth_callback(callback) {
+            return Err(format!(
+                "Unexpected OAuth callback scheme ({})",
+                callback.scheme()
+            ));
         }
 
         let params = oauth_params(callback);
@@ -320,11 +329,12 @@ impl AuthManager {
         let verifier = generate_code_verifier();
         let challenge = code_challenge(&verifier);
         let state = Uuid::new_v4().to_string();
-        let redirect_uri = self.config.oauth_redirect_uri.clone();
+        let redirect_uri = oauth_redirect_for_runtime(&self.config.oauth_redirect_uri);
 
         if !is_allowed_oauth_redirect(&redirect_uri) {
             return Err(
-                "OAuth redirect must use the vox:// app scheme (vox://auth/callback)".to_string(),
+                "OAuth redirect must be vox://auth/callback (release) or http://127.0.0.1:17843/auth/callback (dev)"
+                    .to_string(),
             );
         }
 
@@ -357,9 +367,37 @@ impl AuthManager {
             created_at_unix: now_unix(),
         })?;
 
+        // Debug: listen on loopback before opening the browser so the redirect cannot race us.
+        #[cfg(debug_assertions)]
+        let loopback_rx = if redirect_uri.starts_with("http://127.0.0.1:")
+            || redirect_uri.starts_with("http://localhost:")
+        {
+            Some(spawn_oauth_loopback_listener()?)
+        } else {
+            None
+        };
+
         app.opener()
             .open_url(authorize.as_str(), None::<&str>)
             .map_err(|e| format!("Could not open browser: {e}"))?;
+
+        #[cfg(debug_assertions)]
+        if let Some(loopback_rx) = loopback_rx {
+            let callback = match tokio::time::timeout(Duration::from_secs(180), loopback_rx).await {
+                Ok(Ok(Ok(url))) => url,
+                Ok(Ok(Err(err))) => return Err(err),
+                Ok(Err(_)) => {
+                    return Err("OAuth loopback listener failed unexpectedly".to_string());
+                }
+                Err(_) => {
+                    return Err(
+                        "Timed out waiting for Google in the browser. Add http://127.0.0.1:17843/auth/callback to Supabase Auth redirect URLs, then try again."
+                            .to_string(),
+                    );
+                }
+            };
+            return self.finish_oauth_from_url(&callback).await;
+        }
 
         match tokio::time::timeout(Duration::from_secs(180), rx).await {
             Ok(Ok(Ok(state))) => Ok(state),
@@ -465,14 +503,87 @@ impl AuthManager {
     }
 }
 
+fn oauth_redirect_for_runtime(configured: &str) -> String {
+    #[cfg(debug_assertions)]
+    {
+        let trimmed = configured.trim();
+        if trimmed.starts_with("http://127.0.0.1:") || trimmed.starts_with("http://localhost:") {
+            return trimmed.to_string();
+        }
+        // Ignore production vox:// while developing — Launch Services owns that scheme.
+        return DEV_OAUTH_LOOPBACK.to_string();
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        configured.trim().to_string()
+    }
+}
+
 fn is_allowed_oauth_redirect(redirect_uri: &str) -> bool {
     url::Url::parse(redirect_uri)
         .ok()
-        .is_some_and(|parsed| {
-            parsed.scheme() == OAUTH_SCHEME
-                && parsed.host_str().unwrap_or("auth") == "auth"
-                && parsed.path() == "/callback"
-        })
+        .is_some_and(|parsed| is_allowed_oauth_callback(&parsed))
+}
+
+fn is_allowed_oauth_callback(callback: &url::Url) -> bool {
+    if callback.scheme() == OAUTH_SCHEME {
+        return callback.host_str().unwrap_or("auth") == "auth" && callback.path() == "/callback";
+    }
+    if callback.scheme() == "http" {
+        let host = callback.host_str().unwrap_or("");
+        return (host == "127.0.0.1" || host == "localhost") && callback.path() == "/auth/callback";
+    }
+    false
+}
+
+#[cfg(debug_assertions)]
+fn spawn_oauth_loopback_listener() -> Result<oneshot::Receiver<Result<url::Url, String>>, String> {
+    let (tx, rx) = oneshot::channel();
+    tauri::async_runtime::spawn(async move {
+        let result = accept_oauth_loopback_once().await;
+        let _ = tx.send(result);
+    });
+    Ok(rx)
+}
+
+#[cfg(debug_assertions)]
+async fn accept_oauth_loopback_once() -> Result<url::Url, String> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    let listener = TcpListener::bind(("127.0.0.1", DEV_OAUTH_PORT))
+        .await
+        .map_err(|e| {
+            format!(
+                "Could not bind http://127.0.0.1:{DEV_OAUTH_PORT} for Google sign-in: {e}. Quit other Vox/dev instances and try again."
+            )
+        })?;
+
+    let (mut socket, _) = listener
+        .accept()
+        .await
+        .map_err(|e| format!("OAuth callback accept failed: {e}"))?;
+
+    let mut buf = vec![0u8; 8192];
+    let n = socket
+        .read(&mut buf)
+        .await
+        .map_err(|e| format!("OAuth callback read failed: {e}"))?;
+    let request = String::from_utf8_lossy(&buf[..n]);
+    let request_line = request.lines().next().unwrap_or("");
+    let path_and_query = request_line.split_whitespace().nth(1).unwrap_or("/");
+    let callback = url::Url::parse(&format!("http://127.0.0.1:{DEV_OAUTH_PORT}{path_and_query}"))
+        .map_err(|e| format!("Invalid OAuth callback path: {e}"))?;
+
+    let body = "<!doctype html><html><body style=\"font-family:system-ui;background:#040506;color:#fff;display:flex;min-height:100vh;align-items:center;justify-content:center\"><p>Signed in — you can close this tab and return to Vox.</p></body></html>";
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    let _ = socket.write_all(response.as_bytes()).await;
+    let _ = socket.shutdown().await;
+    Ok(callback)
 }
 
 fn oauth_params(callback: &url::Url) -> HashMap<String, String> {
