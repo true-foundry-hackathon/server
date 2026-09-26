@@ -75,5 +75,5 @@ Public config is injected at **build time** via `src-tauri/build.rs`. End users 
 ## Production backend checklist
 
 - Deploy Bridge + Core with desktop channel + Caddy `/v1/*` → Core.
-- Core: `SUPABASE_JWT_SECRET` matches the Supabase project.
+- Core: `SUPABASE_URL` points at the same Supabase project (JWKS ES256 verify). Optional `SUPABASE_JWT_SECRET` only for legacy HS256 tokens.
 - Optional private-beta fallback on Bridge: `DESKTOP_AUTH_TOKEN` (not used by this app).

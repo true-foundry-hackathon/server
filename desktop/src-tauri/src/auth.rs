@@ -557,8 +557,14 @@ async fn exchange_with_core(
         .map_err(|e| format!("Failed to verify session with Vox API: {e}"))?;
 
     if !me_response.status().is_success() {
+        let detail = if exchange_body.trim().is_empty() {
+            "Core rejected the Supabase access token (often missing SUPABASE_URL / ES256 JWKS support on the API)."
+                .to_string()
+        } else {
+            exchange_body
+        };
         return Err(format!(
-            "Could not create a Vox session ({exchange_status}): {exchange_body}"
+            "Could not create a Vox session ({exchange_status}): {detail}"
         ));
     }
 
