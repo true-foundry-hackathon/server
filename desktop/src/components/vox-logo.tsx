@@ -75,7 +75,9 @@ function HiResThinkingOrb({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const speedRef = useRef(speed);
-  speedRef.current = speed;
+  useEffect(() => {
+    speedRef.current = speed;
+  });
 
   useEffect(() => {
     const canvas = canvasRef.current;

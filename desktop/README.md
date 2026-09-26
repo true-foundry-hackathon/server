@@ -21,7 +21,7 @@ Sign in with your Vox account (Google) to use the app.
 
 Download the Apple Silicon `.dmg` from the draft release, open it, and drag **Vox** to Applications.
 
-Unsigned CI builds are quarantined by Gatekeeper and macOS may show *“Vox.app is damaged”*. Clear quarantine, then open:
+Unsigned CI builds are quarantined by Gatekeeper and macOS may show _“Vox.app is damaged”_. Clear quarantine, then open:
 
 ```sh
 xattr -cr /Applications/Vox.app
@@ -99,12 +99,12 @@ GitHub Actions workflow `.github/workflows/release.yml` builds installers when y
 
 Configure these **environment variables** on the `production` environment in `vox-desktop`:
 
-| Name | Purpose |
-| --- | --- |
-| `VOX_SUPABASE_URL` | Public Supabase project URL |
-| `VOX_SUPABASE_ANON_KEY` | Public Supabase anon / publishable key |
-| `VOX_API_URL` | Core API origin (`https://api.voxagent.in`) |
-| `VOX_BRIDGE_URL` | Bridge origin (usually same as API) |
+| Name                     | Purpose                                     |
+| ------------------------ | ------------------------------------------- |
+| `VOX_SUPABASE_URL`       | Public Supabase project URL                 |
+| `VOX_SUPABASE_ANON_KEY`  | Public Supabase anon / publishable key      |
+| `VOX_API_URL`            | Core API origin (`https://api.voxagent.in`) |
+| `VOX_BRIDGE_URL`         | Bridge origin (usually same as API)         |
 | `VOX_OAUTH_REDIRECT_URI` | Optional; defaults to `vox://auth/callback` |
 
 Keep Apple/Tauri signing material in **secrets**, not variables.

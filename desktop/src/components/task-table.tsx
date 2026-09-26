@@ -12,7 +12,8 @@ export function EmptyTasks({ onNewTask }: { onNewTask: () => void }) {
       <VoxLogo size={54} />
       <h3 className="text-lg font-medium">No tasks found</h3>
       <p className="max-w-sm text-sm text-ash">
-        Ask your Vox agent to create an autonomous task or click New Task to track one.
+        Ask your Vox agent to create an autonomous task or click New Task to
+        track one.
       </p>
       <Button className="shadow-btn-lift mt-2 gap-1.5" onClick={onNewTask}>
         <Plus className="size-4" />
@@ -56,8 +57,10 @@ export function TaskTable({
                 <Badge
                   variant={statusBadgeVariant(task.status)}
                   className={cn(
-                    exec && "border-coral-pulse/35 bg-ember-hush text-coral-pulse",
-                    done && "border-success-green/28 bg-success-green/12 text-success-green",
+                    exec &&
+                      "border-coral-pulse/35 bg-ember-hush text-coral-pulse",
+                    done &&
+                      "border-success-green/28 bg-success-green/12 text-success-green",
                   )}
                 >
                   {exec ? (
@@ -83,7 +86,9 @@ export function TaskTable({
                 </Badge>
               </td>
               <td className="py-3 pr-3 align-top">
-                <Badge variant="outline">{task.project_name ?? "General"}</Badge>
+                <Badge variant="outline">
+                  {task.project_name ?? "General"}
+                </Badge>
               </td>
               <td className="py-3 pr-3 align-top">
                 <div className="flex items-center gap-1.5 text-ash">
@@ -102,7 +107,11 @@ export function TaskTable({
                   >
                     <Check className="size-3.5" />
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => onInspect(task)}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onInspect(task)}
+                  >
                     View
                   </Button>
                 </div>

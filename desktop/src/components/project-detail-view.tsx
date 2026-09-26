@@ -57,7 +57,12 @@ export function ProjectDetailView({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex items-center gap-3 border-b border-border bg-ink px-7 py-4">
-        <Button variant="secondary" size="icon" onClick={onBack} title="Back to Projects">
+        <Button
+          variant="secondary"
+          size="icon"
+          onClick={onBack}
+          title="Back to Projects"
+        >
           <ArrowLeft className="size-4" />
         </Button>
         <h1 className="text-lg font-semibold tracking-tight">{project.name}</h1>
@@ -77,7 +82,9 @@ export function ProjectDetailView({
           <TabsContent value="tasks">
             {loading ? null : tasks.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-                <p className="text-sm text-ash">No tasks in this project yet.</p>
+                <p className="text-sm text-ash">
+                  No tasks in this project yet.
+                </p>
               </div>
             ) : (
               <TaskTable

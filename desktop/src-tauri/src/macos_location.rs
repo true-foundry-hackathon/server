@@ -49,10 +49,17 @@ define_class!(
         }
 
         #[unsafe(method(locationManager:didUpdateLocations:))]
-        fn did_update_locations(&self, _manager: &CLLocationManager, locations: &NSArray<CLLocation>) {
+        fn did_update_locations(
+            &self,
+            _manager: &CLLocationManager,
+            locations: &NSArray<CLLocation>,
+        ) {
             if let Some(loc) = locations.lastObject() {
                 let c = unsafe { loc.coordinate() };
-                finish(Ok(Coords { lat: c.latitude, lng: c.longitude }));
+                finish(Ok(Coords {
+                    lat: c.latitude,
+                    lng: c.longitude,
+                }));
             }
         }
 

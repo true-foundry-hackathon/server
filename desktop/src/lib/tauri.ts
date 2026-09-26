@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export type AuthState = {
   signed_in: boolean;
@@ -98,6 +99,47 @@ export const api = {
     invoke<Collection>("create_collection", payload),
   archiveCollection: (id: string) => invoke<void>("archive_collection", { id }),
 };
+
+export const windowControls = {
+  minimize: () => getCurrentWindow().minimize(),
+  toggleMaximize: () => getCurrentWindow().toggleMaximize(),
+  close: () => getCurrentWindow().close(),
+};
+
+function easeOutCubic(t: number): number {
+  return 1 - (1 - t) ** 3;
+}
+
+/** Eases the native window to a target logical size instead of snapping to it. */
+export async function animateWindowSize(
+  targetWidth: number,
+  targetHeight: number,
+  duration = 320,
+): Promise<void> {
+  const win = getCurrentWindow();
+  const factor = await win.scaleFactor();
+  const current = (await win.innerSize()).toLogical(factor);
+  const fromW = current.width;
+  const fromH = current.height;
+  if (Math.abs(fromW - targetWidth) < 1 && Math.abs(fromH - targetHeight) < 1) {
+    return;
+  }
+
+  const start = performance.now();
+  await new Promise<void>((resolve) => {
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = easeOutCubic(t);
+      void api.setWindowSize(
+        fromW + (targetWidth - fromW) * eased,
+        fromH + (targetHeight - fromH) * eased,
+      );
+      if (t < 1) requestAnimationFrame(step);
+      else resolve();
+    };
+    requestAnimationFrame(step);
+  });
+}
 
 /** Opens the OS location-privacy settings pane directly. */
 export async function openLocationSettings(): Promise<void> {

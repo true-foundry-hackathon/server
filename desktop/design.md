@@ -15,28 +15,31 @@ Vox shares the design DNA of Raycast: high-density, keyboard-first, ultra-respon
 ## 2. Color Palette & Semantic Tokens
 
 ### Backgrounds & Surfaces
-| Token | Hex | Role | Usage |
-|---|---|---|---|
-| **Void Black** | `#040506` | Canvas Base | Window background, primary layout backdrop |
-| **Ink** | `#07080a` | Elevated Surface | Sidebars, cards, modals, table headers |
-| **Obsidian** | `#111214` | Recessed Wells | Form inputs, inactive buttons, table rows |
-| **Graphite** | `#1b1c1e` | Active / Hover Wells | Active sidebar pills, button hover states |
-| **Slate** | `#2f3031` | Border Accent | Secondary buttons, stroke dividers |
+
+| Token          | Hex       | Role                 | Usage                                      |
+| -------------- | --------- | -------------------- | ------------------------------------------ |
+| **Void Black** | `#040506` | Canvas Base          | Window background, primary layout backdrop |
+| **Ink**        | `#07080a` | Elevated Surface     | Sidebars, cards, modals, table headers     |
+| **Obsidian**   | `#111214` | Recessed Wells       | Form inputs, inactive buttons, table rows  |
+| **Graphite**   | `#1b1c1e` | Active / Hover Wells | Active sidebar pills, button hover states  |
+| **Slate**      | `#2f3031` | Border Accent        | Secondary buttons, stroke dividers         |
 
 ### Text & Accents
-| Token | Hex | Role | Usage |
-|---|---|---|---|
-| **Pure White** | `#ffffff` | Primary High-Emphasis | Headings, active text, key titles |
-| **Mist** | `#e6e6e6` | Primary Action Fill | Primary action buttons (`btn-primary-mist`) |
-| **Iron** | `#454647` | Action Text | Contrast text on light fills |
-| **Ash** | `#9c9c9d` | Secondary Text | Subtitles, metadata, inactive icons |
-| **Smoke** | `#6a6b6c` | Tertiary / Labels | Field labels, timestamps, shortcuts |
-| **Coral Pulse** | `#ff6363` | Brand Neon Accent | Voice active state, agent highlights, indicators |
-| **Ember Hush** | `#452324` | Danger / Call State | End call button fill, error callouts |
-| **Electric Sky** | `#63a1ff` | Interactive Mode | Interactive task badges, secondary actions |
-| **Success Green**| `#59d499` | Completion State | Completed task badges, live socket dot |
+
+| Token             | Hex       | Role                  | Usage                                            |
+| ----------------- | --------- | --------------------- | ------------------------------------------------ |
+| **Pure White**    | `#ffffff` | Primary High-Emphasis | Headings, active text, key titles                |
+| **Mist**          | `#e6e6e6` | Primary Action Fill   | Primary action buttons (`btn-primary-mist`)      |
+| **Iron**          | `#454647` | Action Text           | Contrast text on light fills                     |
+| **Ash**           | `#9c9c9d` | Secondary Text        | Subtitles, metadata, inactive icons              |
+| **Smoke**         | `#6a6b6c` | Tertiary / Labels     | Field labels, timestamps, shortcuts              |
+| **Coral Pulse**   | `#ff6363` | Brand Neon Accent     | Voice active state, agent highlights, indicators |
+| **Ember Hush**    | `#452324` | Danger / Call State   | End call button fill, error callouts             |
+| **Electric Sky**  | `#63a1ff` | Interactive Mode      | Interactive task badges, secondary actions       |
+| **Success Green** | `#59d499` | Completion State      | Completed task badges, live socket dot           |
 
 ### Radii & Elevation
+
 - **Cards & Modals**: `16px` / `20px` (`--radius-cards`, `--radius-largecards`)
 - **Buttons & Inputs**: `8px` (`--radius-buttons`, `--radius-inputs`)
 - **Badges & Pills**: `6px` / `9999px` (`--radius-badges`, `--radius-pills`)
@@ -52,6 +55,7 @@ Vox shares the design DNA of Raycast: high-density, keyboard-first, ultra-respon
 ## 3. Desktop Application Architecture & Sizing
 
 ### Window Lifecycle & Sizing
+
 - **Unauthenticated (Sign In) State**:
   - Window Dimension: `800 x 600 px`, **automatically centered on the screen**.
   - Window Chrome: Frameless with 36px top drag region (`.window-drag-bar` / `data-tauri-drag-region`).
@@ -66,6 +70,7 @@ Vox shares the design DNA of Raycast: high-density, keyboard-first, ultra-respon
 ## 4. Layout & Navigation
 
 ### Persistent Left Icon Sidebar Rail (`.sidebar-rail`)
+
 - **Width**: `64px` fixed, Void Black / Ink background with right hairline border.
 - **Top Group**:
   1. **Brand Diamond**: Mini Vox Coral Diamond (`CoralDiamond`), clicks to reset to Cockpit Dashboard.
@@ -80,20 +85,24 @@ Vox shares the design DNA of Raycast: high-density, keyboard-first, ultra-respon
 ## 5. Main Stage Views
 
 ### View 1: Center Voice Cockpit (Dashboard)
+
 When active view is `Dashboard`:
+
 - **Stage Container**: Center-aligned within the 1200px workspace.
 - **Interactive Hero Animating Orb (240px)**:
   - Big slow-animating canvas orb (`size: 240px`) serving as the central interactive control.
   - Centered Frosted Mic Button (`.orb-center-mic`): Centered inside the orb with a frosted glass backdrop and hairline border.
   - **Dynamic Audio Reactive Speed**:
-    - *Idle / Quiet*: Animates slowly and tranquilly at `0.35x` speed.
-    - *Connecting*: Ramps up to `1.8x` speed with connecting gold/amber tone.
-    - *User Speaking*: Continuous audio RMS detector monitors CPAL input stream (`mic_level > 0.012`) and triggers `is_speaking = true`. The orb animates **violently and fast at `3.5x` speed** with an amplified coral neon aura (`#ff6363`) and expanded center mic icon.
-    - *User Quiet / Listening*: Automatically eases back down to gentle `1.0x` speed.
+    - _Idle / Quiet_: Animates slowly and tranquilly at `0.35x` speed.
+    - _Connecting_: Ramps up to `1.8x` speed with connecting gold/amber tone.
+    - _User Speaking_: Continuous audio RMS detector monitors CPAL input stream (`mic_level > 0.012`) and triggers `is_speaking = true`. The orb animates **violently and fast at `3.5x` speed** with an amplified coral neon aura (`#ff6363`) and expanded center mic icon.
+    - _User Quiet / Listening_: Automatically eases back down to gentle `1.0x` speed.
   - Clicking anywhere on the orb starts or ends the duplex voice communication session.
 
 ### View 2: Expanded Tasks Drawer (`.tasks-expanded-view`)
+
 When active view is `Tasks`:
+
 - **Expansion Behavior**:
   - Expands from the 64px sidebar rail completely across to the far right edge of the window (`flex: 1`, full remaining 1136px).
   - The left sidebar icons remain visible and interactive on the left rail.
@@ -127,6 +136,7 @@ When active view is `Tasks`:
 ## 6. Modals & Inspectors
 
 ### 1. Create Agent Task Modal
+
 - Inputs:
   - Task Title
   - Detailed Instruction (textarea for autonomous worker)
@@ -136,6 +146,7 @@ When active view is `Tasks`:
 - Actions: "Cancel" and "Create Task".
 
 ### 2. Task Details Inspector Modal
+
 - Inspects complete agent execution telemetry:
   - Status and Title
   - Full instructions
@@ -147,16 +158,17 @@ When active view is `Tasks`:
 
 ## 7. Keyboard Navigation & Shortcuts
 
-| Key | Context | Action |
-|---|---|---|
-| `↵ Return` | Dashboard (Idle) | Start voice session / unmute mic |
-| `Esc` | Active Voice Session | End call / mute voice channel |
-| `Esc` | Tasks View | Collapse back to Dashboard view |
-| `Esc` | Modals Open | Close active modal / inspector |
+| Key        | Context              | Action                           |
+| ---------- | -------------------- | -------------------------------- |
+| `↵ Return` | Dashboard (Idle)     | Start voice session / unmute mic |
+| `Esc`      | Active Voice Session | End call / mute voice channel    |
+| `Esc`      | Tasks View           | Collapse back to Dashboard view  |
+| `Esc`      | Modals Open          | Close active modal / inspector   |
 
 ---
 
 ## 8. Cross-Platform Consistency (Web & Desktop)
+
 - Design tokens and typography (`Inter` for UI, `Geist Mono` for IDs, timestamps, and status tags) are shared between `vox-web` and `vox-desktop`.
 - Window controls and frame behavior conform to native macOS design guidelines while maintaining the Raycast dark palette.
 
@@ -164,14 +176,14 @@ When active view is `Tasks`:
 
 Desktop UI is composed from `src/ui/` primitives that mirror shadcn/ui APIs, styled with Raycast tokens:
 
-| Primitive | Variants / Notes |
-|---|---|
-| `Button` | `Default` (Mist/Iron), `Secondary`, `Ghost`, `Outline`, `Destructive` (Ember/Coral), `Icon` |
-| `Badge` | `Default`, `Secondary`, `Outline`, `Success`, `Info`, `Accent` (coral), `Destructive` |
-| `Card` | Ink surface + optional `elevated` keyboard-key shadow |
-| `Dialog` | Overlay + key-elevated panel (create task, inspector) |
-| `Input` / `Textarea` / `Select` | Recessed wells (`rgba(255,255,255,0.05)`) |
-| `Tabs` / `TabsList` / `TabsTrigger` | Filter strip on Tasks view |
-| `Label` / `Separator` / `Kbd` | Form labels, dividers, shortcut caps |
+| Primitive                           | Variants / Notes                                                                            |
+| ----------------------------------- | ------------------------------------------------------------------------------------------- |
+| `Button`                            | `Default` (Mist/Iron), `Secondary`, `Ghost`, `Outline`, `Destructive` (Ember/Coral), `Icon` |
+| `Badge`                             | `Default`, `Secondary`, `Outline`, `Success`, `Info`, `Accent` (coral), `Destructive`       |
+| `Card`                              | Ink surface + optional `elevated` keyboard-key shadow                                       |
+| `Dialog`                            | Overlay + key-elevated panel (create task, inspector)                                       |
+| `Input` / `Textarea` / `Select`     | Recessed wells (`rgba(255,255,255,0.05)`)                                                   |
+| `Tabs` / `TabsList` / `TabsTrigger` | Filter strip on Tasks view                                                                  |
+| `Label` / `Separator` / `Kbd`       | Form labels, dividers, shortcut caps                                                        |
 
 Primary actions never use chromatic fills — Mist on Void is the only filled CTA.

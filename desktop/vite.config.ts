@@ -2,8 +2,11 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
+import { readFileSync } from "fs";
 
 const host = process.env.TAURI_DEV_HOST;
+const appVersion = JSON.parse(readFileSync("./package.json", "utf-8"))
+  .version as string;
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -25,6 +28,7 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.GOOGLE_MAPS_API_KEY": JSON.stringify(googleMapsKey),
       "import.meta.env.VITE_GOOGLE_MAPS_API_KEY": JSON.stringify(googleMapsKey),
       "import.meta.env.VOX_GOOGLE_MAPS_API_KEY": JSON.stringify(googleMapsKey),
+      __APP_VERSION__: JSON.stringify(appVersion),
     },
     worker: {
       format: "es",

@@ -54,10 +54,19 @@ export function TasksView({
           </Badge>
         </div>
         <div className="no-drag flex items-center gap-2.5">
-          <Button variant="secondary" size="icon" onClick={onReload} title="Reload">
+          <Button
+            variant="secondary"
+            size="icon"
+            onClick={onReload}
+            title="Reload"
+          >
             <RefreshCw className="size-4" />
           </Button>
-          <Button size="sm" className="shadow-btn-lift gap-1.5" onClick={onNewTask}>
+          <Button
+            size="sm"
+            className="shadow-btn-lift gap-1.5"
+            onClick={onNewTask}
+          >
             <Plus className="size-4" />
             New Task
           </Button>

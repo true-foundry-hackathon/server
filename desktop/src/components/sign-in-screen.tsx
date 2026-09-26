@@ -14,7 +14,10 @@ export function SignInScreen({
   onSignIn: () => void;
 }) {
   return (
-    <main className="relative flex h-full w-full flex-col overflow-hidden bg-void-black" tabIndex={0}>
+    <main
+      className="relative flex h-full w-full flex-col overflow-hidden bg-void-black"
+      tabIndex={0}
+    >
       <div
         className="sign-in-glow pointer-events-none absolute -left-32 -top-36 h-[34rem] w-[34rem]"
         aria-hidden
@@ -28,11 +31,7 @@ export function SignInScreen({
         className="relative z-10 flex flex-1 flex-col items-center justify-center gap-7 px-6"
         data-tauri-drag-region
       >
-        <VoxLogo
-          size={120}
-          animated
-          state={error ? "error" : "idle"}
-        />
+        <VoxLogo size={120} animated state={error ? "error" : "idle"} />
         <div className="flex w-full max-w-105 flex-col items-center text-center">
           <div className="mb-2 inline-flex items-center gap-2">
             <h1 className="text-[32px] font-normal leading-[1.15] text-pure-white">
@@ -46,7 +45,8 @@ export function SignInScreen({
             </Badge>
           </div>
           <p className="mb-7 max-w-80 text-sm text-ash">
-            Talk to your agent, manage tasks, and work with your data — all in one place.
+            Talk to your agent, manage tasks, and work with your data — all in
+            one place.
           </p>
           <Card className="shadow-key w-full border-0 bg-transparent p-1.5">
             <Button
@@ -58,7 +58,9 @@ export function SignInScreen({
               {busy ? "Waiting for Google…" : "Continue with Google"}
             </Button>
             {error ? (
-              <p className="mt-3 text-center text-xs text-coral-pulse">{error}</p>
+              <p className="mt-3 text-center text-xs text-coral-pulse">
+                {error}
+              </p>
             ) : null}
           </Card>
         </div>

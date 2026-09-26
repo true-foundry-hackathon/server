@@ -7,7 +7,7 @@ use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::audio::AudioEngine;
-use crate::auth::StoredSession;
+use crate::session_store::StoredSession;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateDesktopSessionRequest {

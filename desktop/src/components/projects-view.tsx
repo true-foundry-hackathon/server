@@ -52,7 +52,11 @@ export function ProjectsView({
           </Badge>
         </div>
         <div className="no-drag flex items-center gap-2.5">
-          <Button size="sm" className="shadow-btn-lift gap-1.5" onClick={() => setShowNew(true)}>
+          <Button
+            size="sm"
+            className="shadow-btn-lift gap-1.5"
+            onClick={() => setShowNew(true)}
+          >
             <Plus className="size-4" />
             New Project
           </Button>
@@ -67,7 +71,9 @@ export function ProjectsView({
         </div>
       </header>
 
-      {error ? <p className="px-7 pt-3 text-xs text-coral-pulse">{error}</p> : null}
+      {error ? (
+        <p className="px-7 pt-3 text-xs text-coral-pulse">{error}</p>
+      ) : null}
 
       <div className="no-drag min-h-0 flex-1 overflow-auto px-7 py-6">
         {active.length === 0 ? (
@@ -77,7 +83,10 @@ export function ProjectsView({
             <p className="max-w-sm text-sm text-ash">
               Create a project to group tasks, notes, and datasets together.
             </p>
-            <Button className="shadow-btn-lift mt-2 gap-1.5" onClick={() => setShowNew(true)}>
+            <Button
+              className="shadow-btn-lift mt-2 gap-1.5"
+              onClick={() => setShowNew(true)}
+            >
               <Plus className="size-4" />
               New Project
             </Button>
@@ -96,7 +105,9 @@ export function ProjectsView({
                   <Badge variant="outline">{c.kind}</Badge>
                 </div>
                 {c.description ? (
-                  <p className="line-clamp-2 text-xs text-ash">{c.description}</p>
+                  <p className="line-clamp-2 text-xs text-ash">
+                    {c.description}
+                  </p>
                 ) : null}
                 <div className="mt-auto flex w-full items-center justify-between pt-2">
                   <Badge variant="secondary">{c.status}</Badge>

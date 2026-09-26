@@ -42,7 +42,6 @@ export function NewProjectDialog({
         className="shadow-key border-0 bg-ink sm:max-w-lg"
         onEscapeKeyDown={(e) => e.stopPropagation()}
       >
-
         <DialogHeader>
           <DialogTitle>New Project</DialogTitle>
         </DialogHeader>

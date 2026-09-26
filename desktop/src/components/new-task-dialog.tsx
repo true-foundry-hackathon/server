@@ -77,7 +77,9 @@ export function NewTaskDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="autonomous">Autonomous (Agent)</SelectItem>
-                  <SelectItem value="interactive">Interactive (Prompt User)</SelectItem>
+                  <SelectItem value="interactive">
+                    Interactive (Prompt User)
+                  </SelectItem>
                   <SelectItem value="manual_human">Manual Tracking</SelectItem>
                 </SelectContent>
               </Select>
@@ -86,7 +88,9 @@ export function NewTaskDialog({
               <Label>Project / Collection</Label>
               <Select
                 value={form.collectionId || "none"}
-                onValueChange={(v) => onChange({ collectionId: v === "none" ? "" : v })}
+                onValueChange={(v) =>
+                  onChange({ collectionId: v === "none" ? "" : v })
+                }
               >
                 <SelectTrigger>
                   <SelectValue />

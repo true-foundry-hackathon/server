@@ -12,8 +12,14 @@ async function setWorkerBlob() {
   try {
     const res = await fetch(maplibreWorkerUrl);
     const text = await res.text();
-    const sharedAbsoluteUrl = new URL(maplibreSharedUrl, location.href).toString();
-    const patched = text.replace('"./maplibre-gl-shared.mjs"', JSON.stringify(sharedAbsoluteUrl));
+    const sharedAbsoluteUrl = new URL(
+      maplibreSharedUrl,
+      location.href,
+    ).toString();
+    const patched = text.replace(
+      '"./maplibre-gl-shared.mjs"',
+      JSON.stringify(sharedAbsoluteUrl),
+    );
     const blob = new Blob([patched], { type: "text/javascript" });
     maplibregl.setWorkerUrl(URL.createObjectURL(blob));
   } catch {

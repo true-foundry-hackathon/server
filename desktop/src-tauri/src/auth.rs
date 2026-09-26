@@ -1,23 +1,19 @@
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use keyring::Entry;
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use crate::config::PublicConfig;
+use crate::pkce::{code_challenge, generate_code_verifier, oauth_params};
+use crate::session_store::{
+    clear_pending_oauth, clear_session, load_pending_oauth, load_session, save_pending_oauth,
+    save_session, PersistedOauth, StoredSession,
+};
 
-const SERVICE: &str = "com.voxagent.desktop";
-const ACCOUNT: &str = "auth-session";
-const OAUTH_PENDING_ACCOUNT: &str = "oauth-pending";
 const OAUTH_SCHEME: &str = "vox";
 const OAUTH_PENDING_TTL_SECS: i64 = 600;
 /// Fixed loopback used by `cargo tauri dev` — macOS will not deliver `vox://` to the
@@ -26,16 +22,6 @@ const OAUTH_PENDING_TTL_SECS: i64 = 600;
 const DEV_OAUTH_LOOPBACK: &str = "http://127.0.0.1:17843/auth/callback";
 #[cfg(debug_assertions)]
 const DEV_OAUTH_PORT: u16 = 17843;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StoredSession {
-    pub access_token: String,
-    pub refresh_token: String,
-    pub user_id: String,
-    pub email: Option<String>,
-    pub vox_token: String,
-    pub expires_at: Option<String>,
-}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct AuthState {
@@ -75,13 +61,6 @@ struct CoreMeResponse {
 
 struct PendingOauth {
     tx: oneshot::Sender<Result<AuthState, String>>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct PersistedOauth {
-    state: String,
-    verifier: String,
-    created_at_unix: i64,
 }
 
 pub struct AuthManager {
@@ -239,81 +218,6 @@ impl AuthManager {
 
         let _ = clear_pending_oauth();
         self.establish_session(callback_tokens).await
-    }
-
-    pub async fn request_email_otp(&self, email: String) -> Result<(), String> {
-        let email = email.trim().to_string();
-        if email.is_empty() || !email.contains('@') {
-            return Err("Enter a valid email address".to_string());
-        }
-
-        let url = format!("{}/auth/v1/otp", self.config.supabase_url);
-        let body = serde_json::json!({
-            "email": email,
-            "create_user": true,
-        });
-
-        let response = reqwest::Client::new()
-            .post(&url)
-            .header("apikey", &self.config.supabase_anon_key)
-            .header(
-                "authorization",
-                format!("Bearer {}", self.config.supabase_anon_key),
-            )
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| format!("Failed to contact Supabase: {e}"))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(format!("Could not send sign-in code ({status}): {text}"));
-        }
-        Ok(())
-    }
-
-    pub async fn verify_email_otp(
-        &self,
-        email: String,
-        token: String,
-    ) -> Result<AuthState, String> {
-        let email = email.trim().to_string();
-        let token = token.trim().to_string();
-        if email.is_empty() || token.is_empty() {
-            return Err("Email and code are required".to_string());
-        }
-
-        let url = format!("{}/auth/v1/verify", self.config.supabase_url);
-        let body = serde_json::json!({
-            "email": email,
-            "token": token,
-            "type": "email",
-        });
-
-        let response = reqwest::Client::new()
-            .post(&url)
-            .header("apikey", &self.config.supabase_anon_key)
-            .header(
-                "authorization",
-                format!("Bearer {}", self.config.supabase_anon_key),
-            )
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| format!("Failed to verify code: {e}"))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(format!("Invalid or expired code ({status}): {text}"));
-        }
-
-        let tokens = response
-            .json::<SupabaseTokenResponse>()
-            .await
-            .map_err(|e| format!("Invalid Supabase verify response: {e}"))?;
-        self.establish_session(tokens).await
     }
 
     pub async fn sign_in_with_google(&self, app: AppHandle) -> Result<AuthState, String> {
@@ -506,6 +410,24 @@ impl AuthManager {
     }
 }
 
+#[tauri::command]
+pub fn get_auth_state(auth: State<'_, AuthManager>) -> AuthState {
+    auth.state()
+}
+
+#[tauri::command]
+pub async fn sign_in_with_google(
+    app: AppHandle,
+    auth: State<'_, AuthManager>,
+) -> Result<AuthState, String> {
+    auth.sign_in_with_google(app).await
+}
+
+#[tauri::command]
+pub fn sign_out(auth: State<'_, AuthManager>) -> Result<AuthState, String> {
+    auth.sign_out()
+}
+
 fn oauth_redirect_for_runtime(configured: &str) -> String {
     #[cfg(debug_assertions)]
     {
@@ -514,7 +436,7 @@ fn oauth_redirect_for_runtime(configured: &str) -> String {
             return trimmed.to_string();
         }
         // Ignore production vox:// while developing — Launch Services owns that scheme.
-        return DEV_OAUTH_LOOPBACK.to_string();
+        DEV_OAUTH_LOOPBACK.to_string()
     }
     #[cfg(not(debug_assertions))]
     {
@@ -557,227 +479,7 @@ fn spawn_oauth_loopback_listener() -> Result<oneshot::Receiver<Result<url::Url, 
 }
 
 #[cfg(debug_assertions)]
-const DEV_OAUTH_SUCCESS_HTML: &str = concat!(
-    r##"<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Vox is ready</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='18' fill='%23101317'/><circle cx='32' cy='32' r='14' fill='%23ff6363'/></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      /* Raycast / Vox Palette Tokens */
-      --color-void-black: #040506;
-      --color-ink: #07080a;
-      --color-obsidian: #111214;
-      --color-smoke: #6a6b6c;
-      --color-ash: #9c9c9d;
-      --color-mist: #e6e6e6;
-      --color-pure-white: #ffffff;
-      --color-coral-pulse: #ff6363;
-
-      /* Web Fonts */
-      --font-inter: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      --font-geistmono: 'Geist Mono', 'SF Mono', Menlo, Monaco, Consolas, monospace;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      background-color: var(--color-void-black);
-      color: var(--color-pure-white);
-      font-family: var(--font-inter);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      position: relative;
-      overflow: hidden;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-
-    /* Ambient Hero Glow */
-    .ambient-glow {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      z-index: 0;
-      background:
-        radial-gradient(ellipse 650px 340px at 50% 40%, rgba(255, 99, 99, 0.09) 0%, rgba(20, 60, 163, 0.04) 42%, transparent 70%),
-        radial-gradient(circle 800px at 50% 50%, rgba(4, 5, 6, 0.4) 0%, #040506 100%);
-    }
-
-    /* Subtle grid pattern */
-    .grid-pattern {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      z-index: 0;
-      background-image:
-        linear-gradient(to right, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
-      background-size: 32px 32px;
-      mask-image: radial-gradient(ellipse 520px 400px at 50% 45%, black 25%, transparent 80%);
-      -webkit-mask-image: radial-gradient(ellipse 520px 400px at 50% 45%, black 25%, transparent 80%);
-    }
-
-    /* Main layout (open, no card container) */
-    .main-wrap {
-      position: relative;
-      z-index: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      max-width: 520px;
-      margin-top: -36px;
-      animation: fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-    }
-
-    /* Vox Logo (pure orb, no container) */
-    .vox-logo {
-      width: 64px;
-      height: 64px;
-      display: block;
-      margin-bottom: 24px;
-      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-
-    .vox-logo:hover {
-      transform: scale(1.06);
-    }
-
-    /* Elegant h1 matching web */
-    h1 {
-      font-family: var(--font-inter);
-      font-size: clamp(2.2rem, 4.5vw, 3rem);
-      font-weight: 500;
-      color: var(--color-pure-white);
-      letter-spacing: -0.02em;
-      line-height: 1.15;
-      margin-bottom: 12px;
-      text-wrap: balance;
-    }
-
-    /* Subtitle description */
-    .description {
-      font-size: 15px;
-      line-height: 1.55;
-      color: var(--color-ash);
-      font-weight: 400;
-      max-width: 380px;
-      text-wrap: balance;
-    }
-
-    /* Footer metadata pinned to bottom center */
-    .footer-meta {
-      position: fixed;
-      bottom: 28px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      font-family: var(--font-geistmono);
-      font-size: 11px;
-      letter-spacing: 0.06em;
-      color: var(--color-smoke);
-      white-space: nowrap;
-      z-index: 1;
-      user-select: none;
-      opacity: 0.85;
-      transition: opacity 0.2s ease, color 0.2s ease;
-    }
-
-    .footer-meta:hover {
-      opacity: 1;
-      color: var(--color-ash);
-    }
-
-    .footer-meta .sep {
-      color: #2b2c2e;
-    }
-
-    .footer-meta .dot {
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      background: var(--color-coral-pulse);
-      display: inline-block;
-      box-shadow: 0 0 6px var(--color-coral-pulse);
-    }
-
-    @keyframes fadeUp {
-      from {
-        opacity: 0;
-        transform: translateY(12px) scale(0.98);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="ambient-glow"></div>
-  <div class="grid-pattern"></div>
-
-  <div class="main-wrap">
-"##,
-    include_str!("../../assets/vox-orb.svg"),
-    r##"
-
-    <h1 id="auth-title">Vox is ready</h1>
-    <p class="description" id="auth-description">You can close this tab and return to Vox.</p>
-  </div>
-
-  <div class="footer-meta">
-    <span class="dot"></span>
-    <span>VOX DESKTOP</span>
-    <span class="sep">|</span>
-    <span>127.0.0.1:17843</span>
-    <span class="sep">|</span>
-    <span>READY</span>
-  </div>
-
-  <script>
-    const params = new URLSearchParams(window.location.search);
-    if (params.has('error')) {
-      const title = document.getElementById('auth-title');
-      const desc = document.getElementById('auth-description');
-      if (title) title.textContent = 'Sign-in cancelled';
-      if (desc) desc.textContent = params.get('error_description') || 'Authentication was not completed. You can return to Vox and try again.';
-    }
-
-    setTimeout(function() {
-      try {
-        window.close();
-      } catch (e) {}
-    }, 2500);
-
-    window.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') {
-        try { window.close(); } catch (e) {}
-      }
-    });
-  </script>
-</body>
-</html>
-"##
-);
+const DEV_OAUTH_SUCCESS_HTML: &str = include_str!("../assets/oauth_success.html");
 
 #[cfg(debug_assertions)]
 async fn accept_oauth_loopback_once() -> Result<url::Url, String> {
@@ -819,55 +521,6 @@ async fn accept_oauth_loopback_once() -> Result<url::Url, String> {
     let _ = socket.write_all(response.as_bytes()).await;
     let _ = socket.shutdown().await;
     Ok(callback)
-}
-
-fn oauth_params(callback: &url::Url) -> HashMap<String, String> {
-    let mut params: HashMap<String, String> = callback.query_pairs().into_owned().collect();
-    if let Some(fragment) = callback.fragment() {
-        for pair in fragment.split('&') {
-            let mut parts = pair.splitn(2, '=');
-            let Some(key) = parts.next() else {
-                continue;
-            };
-            if key.is_empty() {
-                continue;
-            }
-            let value = parts.next().unwrap_or("");
-            let decoded_key = urlencoding_decode(key);
-            let decoded_value = urlencoding_decode(value);
-            params.entry(decoded_key).or_insert(decoded_value);
-        }
-    }
-    params
-}
-
-fn urlencoding_decode(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    let bytes = value.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'+' => {
-                out.push(' ');
-                i += 1;
-            }
-            b'%' if i + 2 < bytes.len() => {
-                let hex = &value[i + 1..i + 3];
-                if let Ok(byte) = u8::from_str_radix(hex, 16) {
-                    out.push(byte as char);
-                    i += 3;
-                } else {
-                    out.push('%');
-                    i += 1;
-                }
-            }
-            c => {
-                out.push(c as char);
-                i += 1;
-            }
-        }
-    }
-    out
 }
 
 async fn exchange_with_core(
@@ -949,117 +602,9 @@ async fn fetch_supabase_user(
         .map_err(|e| format!("Invalid user profile: {e}"))
 }
 
-fn generate_code_verifier() -> String {
-    let mut bytes = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut bytes);
-    URL_SAFE_NO_PAD.encode(bytes)
-}
-
-fn code_challenge(verifier: &str) -> String {
-    let digest = Sha256::digest(verifier.as_bytes());
-    URL_SAFE_NO_PAD.encode(digest)
-}
-
-fn entry() -> Result<Entry, String> {
-    Entry::new(SERVICE, ACCOUNT).map_err(|e| format!("Keychain unavailable: {e}"))
-}
-
-fn oauth_pending_entry() -> Result<Entry, String> {
-    Entry::new(SERVICE, OAUTH_PENDING_ACCOUNT).map_err(|e| format!("Keychain unavailable: {e}"))
-}
-
 fn now_unix() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
-}
-
-fn oauth_pending_file() -> PathBuf {
-    let base = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
-    base.join("Library/Application Support")
-        .join(SERVICE)
-        .join("oauth-pending.json")
-}
-
-fn save_pending_oauth(pending: &PersistedOauth) -> Result<(), String> {
-    let payload = serde_json::to_string(pending).map_err(|e| e.to_string())?;
-    // Dual-write: keychain + file. File survives keychain flakiness and helps
-    // when the deep-link lands in a different process than the waiter.
-    let path = oauth_pending_file();
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Could not create sign-in state dir: {e}"))?;
-    }
-    std::fs::write(&path, &payload)
-        .map_err(|e| format!("Could not store sign-in state file: {e}"))?;
-    if let Ok(entry) = oauth_pending_entry() {
-        let _ = entry.set_password(&payload);
-    }
-    Ok(())
-}
-
-fn load_pending_oauth() -> Result<Option<PersistedOauth>, String> {
-    if let Ok(entry) = oauth_pending_entry() {
-        match entry.get_password() {
-            Ok(payload) => {
-                let pending = serde_json::from_str(&payload)
-                    .map_err(|e| format!("Stored sign-in state is corrupt: {e}"))?;
-                return Ok(Some(pending));
-            }
-            Err(keyring::Error::NoEntry) => {}
-            Err(e) => eprintln!("keychain oauth-pending read warning: {e}"),
-        }
-    }
-    let path = oauth_pending_file();
-    match std::fs::read_to_string(&path) {
-        Ok(payload) => {
-            let pending = serde_json::from_str(&payload)
-                .map_err(|e| format!("Stored sign-in state file is corrupt: {e}"))?;
-            Ok(Some(pending))
-        }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(format!("Could not read sign-in state file: {e}")),
-    }
-}
-
-fn clear_pending_oauth() -> Result<(), String> {
-    let _ = std::fs::remove_file(oauth_pending_file());
-    match oauth_pending_entry() {
-        Ok(entry) => match entry.delete_credential() {
-            Ok(()) => Ok(()),
-            Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(format!("Could not clear sign-in state: {e}")),
-        },
-        Err(_) => Ok(()),
-    }
-}
-
-fn save_session(session: &StoredSession) -> Result<(), String> {
-    let payload = serde_json::to_string(session).map_err(|e| e.to_string())?;
-    entry()?
-        .set_password(&payload)
-        .map_err(|e| format!("Could not store session securely: {e}"))
-}
-
-fn load_session() -> Result<Option<StoredSession>, String> {
-    match entry()?.get_password() {
-        Ok(payload) => {
-            let session = serde_json::from_str(&payload)
-                .map_err(|e| format!("Stored session is corrupt: {e}"))?;
-            Ok(Some(session))
-        }
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(format!("Could not read stored session: {e}")),
-    }
-}
-
-fn clear_session() -> Result<(), String> {
-    match entry()?.delete_credential() {
-        Ok(()) => Ok(()),
-        Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(format!("Could not clear stored session: {e}")),
-    }
 }

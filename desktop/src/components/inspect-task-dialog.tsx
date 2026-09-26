@@ -25,7 +25,9 @@ export function InspectTaskDialog({
           <>
             <DialogHeader>
               <div className="flex items-center gap-2">
-                <Badge variant={statusBadgeVariant(task.status)}>{task.status}</Badge>
+                <Badge variant={statusBadgeVariant(task.status)}>
+                  {task.status}
+                </Badge>
                 <DialogTitle>{task.title}</DialogTitle>
               </div>
             </DialogHeader>

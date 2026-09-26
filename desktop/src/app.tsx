@@ -1,27 +1,22 @@
-import { useCallback, useEffect, useState } from "react";
-import type { DesktopView } from "@/components/app-sidebar";
+import { useEffect, useState } from "react";
+import {
+  AppSidebar,
+  type DesktopView,
+  type SidebarSectionId,
+} from "@/components/app-sidebar";
 import { DashboardView } from "@/components/dashboard-view";
 import { InspectTaskDialog } from "@/components/inspect-task-dialog";
 import { NewTaskDialog, type NewTaskForm } from "@/components/new-task-dialog";
 import { ProjectDetailView } from "@/components/project-detail-view";
-import type { NewProjectForm } from "@/components/new-project-dialog";
 import { ProjectsView } from "@/components/projects-view";
 import { SignInScreen } from "@/components/sign-in-screen";
 import { TasksView } from "@/components/tasks-view";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import type { VoxOrbVisualState } from "@/components/vox-logo";
+import { useAuth } from "@/hooks/use-auth";
+import { useCallSession } from "@/hooks/use-call-session";
+import { useProjects } from "@/hooks/use-projects";
+import { PAGE_SIZE, useTasks } from "@/hooks/use-tasks";
 import { statusLabel } from "@/lib/status";
-import {
-  api,
-  invokeErrorMessage,
-  type AuthState,
-  type Collection,
-  type DesktopTask,
-} from "@/lib/tauri";
-
-const PAGE_SIZE = 10;
+import type { DesktopTask } from "@/lib/tauri";
 
 const emptyNewTask: NewTaskForm = {
   title: "",
@@ -32,131 +27,64 @@ const emptyNewTask: NewTaskForm = {
 };
 
 export default function App() {
-  const [auth, setAuth] = useState<AuthState>({
-    signed_in: false,
-    user_id: null,
-    email: null,
-    bridge_url: "",
-    api_url: "",
-  });
-  const [authBusy, setAuthBusy] = useState(false);
-  const [authError, setAuthError] = useState("");
-  const [callState, setCallState] = useState("idle");
-  const [isActive, setIsActive] = useState(false);
-  const [isBusy, setIsBusy] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [callError, setCallError] = useState("");
+  const auth = useAuth();
+  const callSession = useCallSession(auth.auth.signed_in);
 
   const [view, setView] = useState<DesktopView>("dashboard");
-  const [tasks, setTasks] = useState<DesktopTask[]>([]);
-  const [tasksLoading, setTasksLoading] = useState(false);
-  const [page, setPage] = useState(1);
-  const [totalTasks, setTotalTasks] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
-  const [filter, setFilter] = useState("all");
-  const [search, setSearch] = useState("");
+  const tasksHook = useTasks(auth.auth.signed_in, view);
+  const projectsHook = useProjects(auth.auth.signed_in);
+
   const [showProfile, setShowProfile] = useState(false);
+  const [activeSection, setActiveSection] = useState<SidebarSectionId | null>(
+    null,
+  );
   const [showNewTask, setShowNewTask] = useState(false);
   const [inspectTask, setInspectTask] = useState<DesktopTask | null>(null);
   const [newTask, setNewTask] = useState<NewTaskForm>(emptyNewTask);
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [projectsError, setProjectsError] = useState("");
 
-  const loadCollections = useCallback(async () => {
-    try {
-      const res = await api.getCollections();
-      setCollections(res);
-    } catch {
-      /* keep previous list */
-    }
-  }, []);
+  const { auth: authState, authBusy, authError, googleSignIn } = auth;
+  const {
+    callState,
+    isActive,
+    isBusy,
+    isSpeaking,
+    callError,
+    toggleCall,
+    endCall,
+    resetCallState,
+  } = callSession;
+  const {
+    tasks,
+    tasksLoading,
+    page,
+    setPage,
+    totalTasks,
+    totalPages,
+    filter,
+    setFilter,
+    search,
+    setSearch,
+    pendingCount,
+    loadTasks,
+    createTask,
+    toggleTaskStatus,
+  } = tasksHook;
+  const {
+    collections,
+    selectedProjectId,
+    setSelectedProjectId,
+    projectsError,
+    loadCollections,
+    createProject,
+    archiveProject,
+  } = projectsHook;
 
-  useEffect(() => {
-    if (auth.signed_in) void loadCollections();
-  }, [auth.signed_in, loadCollections]);
-
-  const pendingCount = tasks.filter(
-    (t) => t.status === "pending" || t.status === "executing",
-  ).length;
-
-  const loadTasks = useCallback(async () => {
-    setTasksLoading(true);
-    try {
-      const res = await api.getTasks({
-        page,
-        page_size: PAGE_SIZE,
-        status: filter === "all" ? undefined : filter,
-        search: search.trim() || undefined,
-      });
-      setTasks(res.items ?? []);
-      setTotalTasks(res.total ?? 0);
-      setTotalPages(Math.max(1, res.total_pages ?? 1));
-      if (res.page > 0) setPage(res.page);
-    } catch {
-      /* keep cache */
-    } finally {
-      setTasksLoading(false);
-    }
-  }, [page, filter, search]);
-
-  useEffect(() => {
-    void api.centerWindow().catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    if (auth.signed_in) void api.setWindowSize(1280, 940).catch(() => undefined);
-    else void api.setWindowSize(800, 600).catch(() => undefined);
-  }, [auth.signed_in]);
-
-  useEffect(() => {
-    if (auth.signed_in) return;
-    const id = window.setInterval(() => {
-      void api.getAuthState().then((next) => {
-        if (next.signed_in) {
-          setAuth(next);
-          setAuthBusy(false);
-          setAuthError("");
-        }
-      });
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [auth.signed_in]);
-
-  useEffect(() => {
-    if (!auth.signed_in) return;
-    const delay = isActive ? 90 : 800;
-    const id = window.setInterval(() => {
-      void api.callStatus().then((status) => {
-        if (!status.state) return;
-        setCallState(status.state);
-        setIsActive(status.active);
-        setIsSpeaking(status.is_speaking);
-        if (status.state === "idle" || status.state === "ended") {
-          setIsBusy(false);
-          setIsSpeaking(false);
-        }
-      });
-    }, delay);
-    return () => window.clearInterval(id);
-  }, [auth.signed_in, isActive]);
-
-  useEffect(() => {
-    if (!auth.signed_in) return;
-    void loadTasks();
-  }, [auth.signed_in, loadTasks]);
-
-  useEffect(() => {
-    if (!auth.signed_in || view !== "tasks") return;
-    const id = window.setInterval(() => void loadTasks(), 3500);
-    return () => window.clearInterval(id);
-  }, [auth.signed_in, view, loadTasks]);
-
+  // Keyboard shortcuts: Enter-to-talk, Escape priority chain.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (
         e.key === "Enter" &&
-        auth.signed_in &&
+        authState.signed_in &&
         view === "dashboard" &&
         !isActive &&
         !isBusy
@@ -166,7 +94,8 @@ export default function App() {
         if (showNewTask) setShowNewTask(false);
         else if (inspectTask) setInspectTask(null);
         else if (showProfile) setShowProfile(false);
-        else if (view === "projects" && selectedProjectId) setSelectedProjectId(null);
+        else if (view === "projects" && selectedProjectId)
+          setSelectedProjectId(null);
         else if (view === "projects") setView("dashboard");
         else if (view === "tasks") setView("dashboard");
         else if (isActive || callState === "connecting") void endCall();
@@ -176,7 +105,7 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers use latest state via closure refresh
   }, [
-    auth.signed_in,
+    authState.signed_in,
     view,
     isActive,
     isBusy,
@@ -187,98 +116,27 @@ export default function App() {
     selectedProjectId,
   ]);
 
-  async function googleSignIn() {
-    setAuthBusy(true);
-    setAuthError("");
-    try {
-      const next = await api.signInWithGoogle();
-      setAuth(next);
-      await loadTasks();
-    } catch (err) {
-      setAuthError(invokeErrorMessage(err));
-    } finally {
-      setAuthBusy(false);
-    }
+  async function handleGoogleSignIn() {
+    await googleSignIn(loadTasks);
   }
 
-  async function signOut() {
-    try {
-      const next = await api.signOut();
-      setAuth(next);
-    } catch {
-      /* ignore */
-    }
-    setIsActive(false);
-    setIsBusy(false);
-    setIsSpeaking(false);
-    setCallState("idle");
-    setCallError("");
+  async function handleSignOut() {
+    await auth.signOut();
+    resetCallState();
     setShowProfile(false);
     setView("dashboard");
   }
 
-  async function endCall() {
-    await api.endCall();
-    setCallState("idle");
-    setIsActive(false);
-    setIsBusy(false);
-    setIsSpeaking(false);
-    setCallError("");
-  }
-
-  async function toggleCall() {
-    if (isActive) {
-      await endCall();
-      return;
+  async function handleCreateTask() {
+    const created = await createTask(newTask);
+    if (created) {
+      setNewTask(emptyNewTask);
+      setShowNewTask(false);
     }
-    if (isBusy || !auth.signed_in) return;
-    setIsBusy(true);
-    setCallError("");
-    setCallState("connecting");
-    try {
-      const status = await api.startCall();
-      if (status.state === "active" || status.active) {
-        setCallState("active");
-        setIsActive(true);
-      } else {
-        setCallState("idle");
-        setIsActive(false);
-        setCallError(invokeErrorMessage(status));
-      }
-    } catch (err) {
-      setCallState("idle");
-      setIsActive(false);
-      setCallError(invokeErrorMessage(err));
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  async function toggleTaskStatus(task: DesktopTask) {
-    const next = task.status === "completed" ? "pending" : "completed";
-    await api.updateTask({ task_id: task.id, status: next });
-    setTasks((prev) =>
-      prev.map((t) => (t.id === task.id ? { ...t, status: next } : t)),
-    );
-    await loadTasks();
-  }
-
-  async function createTask() {
-    const title = newTask.title.trim();
-    if (!title) return;
-    await api.createTask({
-      title,
-      instruction: newTask.instruction.trim() || undefined,
-      execution_type: newTask.execType,
-      collection_id: newTask.collectionId || undefined,
-      due_at: newTask.due,
-    });
-    setNewTask(emptyNewTask);
-    setShowNewTask(false);
-    await loadTasks();
   }
 
   function handleViewChange(next: DesktopView) {
+    setActiveSection(null);
     setView(next);
     if (next === "tasks") void loadTasks();
     if (next === "projects") {
@@ -287,47 +145,6 @@ export default function App() {
     }
   }
 
-  async function createProject(form: NewProjectForm) {
-    try {
-      await api.createCollection({
-        name: form.name.trim(),
-        description: form.description.trim() || undefined,
-        kind: form.kind,
-      });
-      setProjectsError("");
-      await loadCollections();
-    } catch (err) {
-      setProjectsError(invokeErrorMessage(err));
-      throw err;
-    }
-  }
-
-  async function archiveProject(id: string) {
-    try {
-      await api.archiveCollection(id);
-      if (selectedProjectId === id) setSelectedProjectId(null);
-      setProjectsError("");
-      await loadCollections();
-    } catch (err) {
-      setProjectsError(invokeErrorMessage(err));
-    }
-  }
-
-  const orbState: VoxOrbVisualState = isActive
-    ? "active"
-    : callState === "connecting" || isBusy
-      ? "connecting"
-      : callError
-        ? "error"
-        : "idle";
-
-  const orbSpeed = isSpeaking
-    ? 3.5
-    : isActive
-      ? 1
-      : isBusy || callState === "connecting"
-        ? 1.8
-        : 0.35;
   const label = statusLabel(callState, callError);
   const subLabel = isActive
     ? isSpeaking
@@ -337,38 +154,51 @@ export default function App() {
       ? "Establishing duplex audio link…"
       : "Press the button or hit Return to talk";
 
-  const accountLabel = auth.email ?? auth.user_id ?? "Signed in";
+  const accountLabel = authState.email ?? authState.user_id ?? "Signed in";
 
-  if (!auth.signed_in) {
+  if (!authState.signed_in) {
     return (
       <SignInScreen
         busy={authBusy}
         error={authError}
-        onSignIn={() => void googleSignIn()}
+        onSignIn={() => void handleGoogleSignIn()}
       />
     );
   }
 
   return (
-    <main className="relative flex h-full w-full overflow-hidden bg-void-black" tabIndex={0}>
-      <div className="fixed inset-x-0 top-0 z-50 h-9" data-tauri-drag-region />
+    <main
+      className="relative flex h-full w-full overflow-hidden bg-void-black"
+      tabIndex={0}
+    >
+      <AppSidebar
+        view={view}
+        pendingCount={pendingCount}
+        activeSection={activeSection}
+        showProfile={showProfile}
+        accountLabel={accountLabel}
+        bridgeUrl={authState.bridge_url}
+        onViewChange={handleViewChange}
+        onSelectSection={setActiveSection}
+        onToggleProfile={() => setShowProfile((v) => !v)}
+        onSignOut={() => void handleSignOut()}
+      />
 
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        <div
+          className="absolute inset-x-0 top-0 z-30 h-9"
+          data-tauri-drag-region
+        />
         {view === "dashboard" ? (
           <DashboardView
-            orbState={orbState}
-            orbSpeed={orbSpeed}
             isActive={isActive}
             isSpeaking={isSpeaking}
             callState={callState}
             label={label}
             subLabel={subLabel}
             callError={callError}
-            pendingCount={pendingCount}
+            activeSection={activeSection}
             onToggleCall={() => void toggleCall()}
-            onOpenTasks={() => handleViewChange("tasks")}
-            onOpenProjects={() => handleViewChange("projects")}
-            onOpenSettings={() => setShowProfile((v) => !v)}
           />
         ) : view === "tasks" ? (
           <TasksView
@@ -421,55 +251,19 @@ export default function App() {
         )}
       </section>
 
-      {showProfile ? (
-        <>
-          <button
-            type="button"
-            className="absolute inset-0 z-40 cursor-default bg-black/30"
-            aria-label="Close settings"
-            onClick={() => setShowProfile(false)}
-          />
-          <Card className="shadow-key absolute bottom-8 right-8 z-50 w-64 gap-3 border-0 p-3.5">
-            <div>
-              <p className="font-mono text-[10.5px] uppercase tracking-wide text-smoke">
-                Signed In
-              </p>
-              <p className="truncate font-mono text-[12.5px] text-pure-white">
-                {accountLabel}
-              </p>
-            </div>
-            <Separator />
-            <div className="space-y-1.5 rounded-md border border-border bg-obsidian px-2.5 py-2 font-mono text-[11px]">
-              <div className="flex justify-between gap-3">
-                <span className="text-smoke">Bridge</span>
-                <span className="truncate text-mist">bridge.voxagent.in</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-smoke">Audio</span>
-                <span className="text-mist">Opus 48kHz</span>
-              </div>
-            </div>
-            <Button
-              variant="destructive"
-              className="h-8 w-full text-coral-pulse"
-              onClick={() => void signOut()}
-            >
-              Sign Out
-            </Button>
-          </Card>
-        </>
-      ) : null}
-
       <NewTaskDialog
         open={showNewTask}
         form={newTask}
         collections={collections}
         onOpenChange={setShowNewTask}
         onChange={(patch) => setNewTask((prev) => ({ ...prev, ...patch }))}
-        onSubmit={() => void createTask()}
+        onSubmit={() => void handleCreateTask()}
       />
 
-      <InspectTaskDialog task={inspectTask} onClose={() => setInspectTask(null)} />
+      <InspectTaskDialog
+        task={inspectTask}
+        onClose={() => setInspectTask(null)}
+      />
     </main>
   );
 }

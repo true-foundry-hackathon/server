@@ -29,7 +29,11 @@ async function gpsOnce(): Promise<{ lat: number; lng: number }> {
   }
 }
 
-async function ipApprox(): Promise<{ lat: number; lng: number; city?: string }> {
+async function ipApprox(): Promise<{
+  lat: number;
+  lng: number;
+  city?: string;
+}> {
   const res = await fetch("https://ipapi.co/json/", {
     signal: AbortSignal.timeout(8_000),
   });
@@ -52,7 +56,7 @@ async function ipApprox(): Promise<{ lat: number; lng: number; city?: string }> 
 
 /** Prefer GPS; fall back to IP approx so the map still centers near the user. */
 export async function resolveDeviceLocation(): Promise<DeviceLocation> {
-  let permissionDenied = false;
+  let permissionDenied: boolean;
 
   try {
     const gps = await gpsOnce();
