@@ -547,6 +547,401 @@ fn spawn_oauth_loopback_listener() -> Result<oneshot::Receiver<Result<url::Url, 
 }
 
 #[cfg(debug_assertions)]
+const DEV_OAUTH_SUCCESS_HTML: &str = r##"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Signed in to Vox</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='12' y='2' width='13' height='13' rx='3' transform='rotate(45 12 2)' fill='%23ff6363'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* Raycast Palette Tokens */
+      --color-void-black: #040506;
+      --color-ink: #07080a;
+      --color-obsidian: #111214;
+      --color-graphite: #1b1c1e;
+      --color-smoke: #6a6b6c;
+      --color-ash: #9c9c9d;
+      --color-mist: #e6e6e6;
+      --color-iron: #1b1c1e;
+      --color-slate: #2f3031;
+      --color-pure-white: #ffffff;
+      --color-coral-pulse: #ff6363;
+      --color-ember-hush: #452324;
+      --color-electric-sky: #63a1ff;
+      --color-cobalt-edge: #143ca3;
+      --color-deep-space: #02193b;
+      --color-success-green: #59d499;
+
+      /* Typography */
+      --font-inter: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+      --font-geistmono: 'Geist Mono', 'SF Mono', Menlo, Monaco, Consolas, monospace;
+
+      /* Border Radii */
+      --radius-cards: 16px;
+      --radius-buttons: 8px;
+      --radius-badges: 6px;
+      --radius-circle: 99999px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--color-void-black);
+      color: var(--color-pure-white);
+      font-family: var(--font-inter);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Ambient Hero Gradient Geometry */
+    .ambient-glow {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        radial-gradient(ellipse 650px 340px at 50% 28%, rgba(20, 60, 163, 0.16) 0%, rgba(2, 25, 59, 0.05) 50%, transparent 75%),
+        radial-gradient(circle 260px at 50% 32%, rgba(255, 99, 99, 0.08) 0%, transparent 68%);
+    }
+
+    /* Hairline Background Grid */
+    .grid-pattern {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background-image:
+        linear-gradient(to right, rgba(255, 255, 255, 0.016) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.016) 1px, transparent 1px);
+      background-size: 32px 32px;
+      mask-image: radial-gradient(ellipse 850px 520px at 50% 50%, #000 35%, transparent 80%);
+      -webkit-mask-image: radial-gradient(ellipse 850px 520px at 50% 50%, #000 35%, transparent 80%);
+    }
+
+    /* Tactile Feature Card */
+    .card {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 440px;
+      background-color: var(--color-ink);
+      border-radius: var(--radius-cards);
+      border: 1px solid #232427;
+      padding: 38px 32px 28px;
+      text-align: center;
+      /* Signature Raycast 'keyboard key' inner shadow stack */
+      box-shadow:
+        rgba(255, 255, 255, 0.05) 0px 1px 0px 0px inset,
+        rgba(255, 255, 255, 0.18) 0px 0px 0px 1px,
+        rgba(0, 0, 0, 0.25) 0px -1px 0px 0px inset,
+        rgba(0, 0, 0, 0.75) 0px 32px 64px -16px;
+      animation: cardEntrance 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes cardEntrance {
+      0% {
+        opacity: 0;
+        transform: translateY(14px) scale(0.98);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    /* Circular Icon Container (Dock / Keycap style) */
+    .icon-container {
+      width: 58px;
+      height: 58px;
+      margin: 0 auto 20px;
+      border-radius: var(--radius-circle);
+      background: var(--color-obsidian);
+      border: 1px solid #232427;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow:
+        rgba(255, 255, 255, 0.08) 0px 1px 0px 0px inset,
+        rgba(0, 0, 0, 0.5) 0px 2px 6px inset;
+      position: relative;
+    }
+
+    .coral-diamond-svg {
+      filter: drop-shadow(0 0 14px rgba(255, 99, 99, 0.45));
+    }
+
+    /* Badge Tag */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 9px;
+      border-radius: var(--radius-badges);
+      background: var(--color-graphite);
+      border: 1px solid #28292c;
+      font-family: var(--font-geistmono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.07em;
+      color: var(--color-ash);
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: var(--radius-circle);
+      background: var(--color-success-green);
+      box-shadow: 0 0 8px var(--color-success-green);
+      animation: pulse 2.6s infinite ease-in-out;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(0.85); }
+    }
+
+    /* Typography */
+    h1 {
+      font-size: 22px;
+      font-weight: 500;
+      letter-spacing: 0.005em;
+      line-height: 1.25;
+      color: var(--color-pure-white);
+      margin-bottom: 8px;
+    }
+
+    p.description {
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--color-ash);
+      line-height: 1.5;
+      margin-bottom: 22px;
+    }
+
+    /* Recessed Shortcut Well */
+    .shortcut-well {
+      background: var(--color-obsidian);
+      border: 1px solid #1c1d20;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--color-ash);
+    }
+
+    kbd {
+      background: var(--color-graphite);
+      border: 1px solid var(--color-slate);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-family: var(--font-geistmono);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--color-pure-white);
+      box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.08) inset,
+        0 -1px 0 rgba(0, 0, 0, 0.5) inset;
+    }
+
+    /* Actions */
+    .button-group {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .btn {
+      font-family: var(--font-inter);
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: var(--radius-buttons);
+      padding: 9px 18px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+      text-decoration: none;
+    }
+
+    /* Mist Neutral Filled Button */
+    .btn-primary {
+      background: var(--color-mist);
+      color: var(--color-iron);
+      border: none;
+      box-shadow:
+        rgba(0, 0, 0, 0.03) 0px 7px 3px 0px,
+        rgba(0, 0, 0, 0.25) 0px 4px 4px 0px;
+    }
+
+    .btn-primary:hover {
+      background: var(--color-pure-white);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary:active {
+      background: #d4d4d4;
+      transform: translateY(1px);
+    }
+
+    /* Ghost Button */
+    .btn-ghost {
+      background: transparent;
+      color: var(--color-ash);
+      border: 1px solid var(--color-slate);
+    }
+
+    .btn-ghost:hover {
+      color: var(--color-pure-white);
+      border-color: #454647;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    /* Footer Metadata Strip */
+    .footer-meta {
+      margin-top: 26px;
+      padding-top: 18px;
+      border-top: 1px solid #161719;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-family: var(--font-geistmono);
+      font-size: 11px;
+      color: var(--color-smoke);
+      letter-spacing: 0.05em;
+    }
+
+    .footer-meta span {
+      display: inline-block;
+    }
+
+    .footer-meta .sep {
+      opacity: 0.4;
+    }
+  </style>
+</head>
+<body>
+  <div class="ambient-glow"></div>
+  <div class="grid-pattern"></div>
+
+  <div class="card">
+    <div class="icon-container">
+      <svg class="coral-diamond-svg" width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="12" y="2" width="13" height="13" rx="3" transform="rotate(45 12 2)" fill="#ff6363" />
+        <path d="M8.5 12.2L11 14.7L15.8 9.5" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </div>
+
+    <div class="badge" id="auth-badge">
+      <span class="status-dot" id="auth-dot"></span>
+      <span id="auth-badge-text">Authenticated</span>
+    </div>
+
+    <h1 id="auth-title">Signed in to Vox</h1>
+    <p class="description" id="auth-description">Your desktop session is verified and ready. You can return to Vox now.</p>
+
+    <div class="shortcut-well">
+      <span>Close tab with</span>
+      <kbd id="mod-key">&#8984;</kbd><kbd>W</kbd>
+      <span>or continue below</span>
+    </div>
+
+    <div class="button-group">
+      <button class="btn btn-primary" onclick="openVox()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 3h6v6"></path>
+          <path d="M10 14L21 3"></path>
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+        </svg>
+        <span>Open Vox</span>
+      </button>
+      <button class="btn btn-ghost" onclick="closeTab()">
+        <span>Close Tab</span>
+      </button>
+    </div>
+
+    <div class="footer-meta">
+      <span>VOX DESKTOP</span>
+      <span class="sep">|</span>
+      <span>127.0.0.1:17843</span>
+      <span class="sep">|</span>
+      <span>SESSION READY</span>
+    </div>
+  </div>
+
+  <script>
+    const isMac = navigator.platform.toUpperCase().includes('MAC') || navigator.userAgent.includes('Macintosh');
+    if (!isMac) {
+      const mod = document.getElementById('mod-key');
+      if (mod) mod.textContent = 'Ctrl';
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('error')) {
+      const title = document.getElementById('auth-title');
+      const desc = document.getElementById('auth-description');
+      const badgeText = document.getElementById('auth-badge-text');
+      const dot = document.getElementById('auth-dot');
+      if (title) title.textContent = 'Authentication Cancelled';
+      if (desc) desc.textContent = params.get('error_description') || 'Authentication was not completed. You can retry from Vox.';
+      if (badgeText) badgeText.textContent = 'Auth Incomplete';
+      if (dot) {
+        dot.style.background = '#ff6363';
+        dot.style.boxShadow = '0 0 8px #ff6363';
+      }
+    }
+
+    function openVox() {
+      try {
+        window.location.href = 'vox://';
+      } catch (e) {}
+    }
+
+    function closeTab() {
+      window.close();
+      setTimeout(function() {
+        const desc = document.getElementById('auth-description');
+        if (desc) desc.textContent = 'You can safely close this browser window and switch back to Vox.';
+      }, 250);
+    }
+
+    window.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        closeTab();
+      }
+    });
+  </script>
+</body>
+</html>
+"##;
+
+#[cfg(debug_assertions)]
 async fn accept_oauth_loopback_once() -> Result<url::Url, String> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
@@ -575,7 +970,7 @@ async fn accept_oauth_loopback_once() -> Result<url::Url, String> {
     let callback = url::Url::parse(&format!("http://127.0.0.1:{DEV_OAUTH_PORT}{path_and_query}"))
         .map_err(|e| format!("Invalid OAuth callback path: {e}"))?;
 
-    let body = "<!doctype html><html><body style=\"font-family:system-ui;background:#040506;color:#fff;display:flex;min-height:100vh;align-items:center;justify-content:center\"><p>Signed in — you can close this tab and return to Vox.</p></body></html>";
+    let body = DEV_OAUTH_SUCCESS_HTML;
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         body.len(),

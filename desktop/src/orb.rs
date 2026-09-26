@@ -732,11 +732,8 @@ pub fn ThinkingOrb(props: ThinkingOrbProps) -> Element {
 
                 let opts = js_sys::Object::new();
                 let _ = js_sys::Reflect::set(&opts, &"state".into(), &JsValue::from_str(&state));
-                let _ = js_sys::Reflect::set(
-                    &opts,
-                    &"size".into(),
-                    &JsValue::from_f64(size as f64),
-                );
+                let _ =
+                    js_sys::Reflect::set(&opts, &"size".into(), &JsValue::from_f64(size as f64));
                 let _ = js_sys::Reflect::set(&opts, &"theme".into(), &JsValue::from_str("dark"));
                 let _ = js_sys::Reflect::set(&opts, &"speed".into(), &JsValue::from_f64(speed));
 

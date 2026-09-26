@@ -27,7 +27,11 @@ pub fn mulaw_to_linear(u_val: u8) -> i16 {
     let mantissa = (u_val & 0x0F) as i16;
     let mut sample = ((mantissa << 3) + 0x84) << exponent;
     sample -= 0x84;
-    if sign { -sample } else { sample }
+    if sign {
+        -sample
+    } else {
+        sample
+    }
 }
 
 pub fn resample_input_to_8k_mulaw(input: &[f32], in_rate: u32, in_channels: u16) -> Vec<u8> {

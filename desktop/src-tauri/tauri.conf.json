@@ -13,10 +13,11 @@
     "withGlobalTauri": true,
     "windows": [
       {
+        "label": "main",
         "title": "Vox",
         "width": 800,
         "height": 600,
-        "resizable": false,
+        "resizable": true,
         "center": true,
         "decorations": false,
         "transparent": false,

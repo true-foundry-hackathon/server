@@ -1,7 +1,7 @@
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
