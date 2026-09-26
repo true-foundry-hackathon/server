@@ -17,44 +17,16 @@ permissions:
 jobs:
   publish:
     environment: production
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: macos-14
-            args: --target aarch64-apple-darwin
-            target: aarch64-apple-darwin
-          - platform: macos-13
-            args: --target x86_64-apple-darwin
-            target: x86_64-apple-darwin
-          - platform: ubuntu-22.04
-            args: ""
-            target: x86_64-unknown-linux-gnu
-          - platform: windows-latest
-            args: ""
-            target: x86_64-pc-windows-msvc
-
-    runs-on: ${{ matrix.platform }}
+    runs-on: macos-14
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libasound2-dev
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: aarch64-apple-darwin
 
       - name: Install Dioxus CLI
         run: cargo install dioxus-cli --locked
@@ -81,10 +53,10 @@ jobs:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag_name || format('desktop-{0}', github.sha) }}
           releaseName: Vox Desktop ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag_name || github.sha }}
           releaseBody: |
-            Desktop voice client build.
+            Desktop voice client build (Apple Silicon).
 
             Google sign-in redirect (add in Supabase Auth URL config):
             `vox://auth/callback`
           releaseDraft: true
           prerelease: false
-          args: ${{ matrix.args }}
+          args: --target aarch64-apple-darwin
