@@ -3,6 +3,9 @@ import type { DesktopView } from "@/components/app-sidebar";
 import { DashboardView } from "@/components/dashboard-view";
 import { InspectTaskDialog } from "@/components/inspect-task-dialog";
 import { NewTaskDialog, type NewTaskForm } from "@/components/new-task-dialog";
+import { ProjectDetailView } from "@/components/project-detail-view";
+import type { NewProjectForm } from "@/components/new-project-dialog";
+import { ProjectsView } from "@/components/projects-view";
 import { SignInScreen } from "@/components/sign-in-screen";
 import { TasksView } from "@/components/tasks-view";
 import { Button } from "@/components/ui/button";
@@ -57,6 +60,7 @@ export default function App() {
   const [inspectTask, setInspectTask] = useState<DesktopTask | null>(null);
   const [newTask, setNewTask] = useState<NewTaskForm>(emptyNewTask);
   const [collections, setCollections] = useState<Collection[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   const loadCollections = useCallback(async () => {
     try {
@@ -273,6 +277,25 @@ export default function App() {
   function handleViewChange(next: DesktopView) {
     setView(next);
     if (next === "tasks") void loadTasks();
+    if (next === "projects") {
+      setSelectedProjectId(null);
+      void loadCollections();
+    }
+  }
+
+  async function createProject(form: NewProjectForm) {
+    await api.createCollection({
+      name: form.name.trim(),
+      description: form.description.trim() || undefined,
+      kind: form.kind,
+    });
+    await loadCollections();
+  }
+
+  async function archiveProject(id: string) {
+    await api.archiveCollection(id);
+    if (selectedProjectId === id) setSelectedProjectId(null);
+    await loadCollections();
   }
 
   const orbState: VoxOrbVisualState = isActive
@@ -329,9 +352,10 @@ export default function App() {
             pendingCount={pendingCount}
             onToggleCall={() => void toggleCall()}
             onOpenTasks={() => handleViewChange("tasks")}
+            onOpenProjects={() => handleViewChange("projects")}
             onOpenSettings={() => setShowProfile((v) => !v)}
           />
-        ) : (
+        ) : view === "tasks" ? (
           <TasksView
             tasks={tasks}
             totalTasks={totalTasks}
@@ -355,6 +379,28 @@ export default function App() {
             onPageChange={setPage}
             onToggleStatus={(task) => void toggleTaskStatus(task)}
             onInspect={setInspectTask}
+          />
+        ) : selectedProjectId ? (
+          <ProjectDetailView
+            project={
+              collections.find((c) => c.id === selectedProjectId) ?? {
+                id: selectedProjectId,
+                name: "Project",
+                description: "",
+                kind: "project",
+                status: "active",
+              }
+            }
+            onBack={() => setSelectedProjectId(null)}
+            onInspectTask={setInspectTask}
+          />
+        ) : (
+          <ProjectsView
+            collections={collections}
+            onSelectProject={setSelectedProjectId}
+            onCreateProject={createProject}
+            onArchiveProject={(id) => void archiveProject(id)}
+            onCollapse={() => setView("dashboard")}
           />
         )}
       </section>
