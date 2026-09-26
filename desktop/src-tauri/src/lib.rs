@@ -5,6 +5,7 @@ mod codec;
 mod config;
 mod deep_link;
 mod device_link;
+mod live_link;
 #[cfg(target_os = "macos")]
 mod macos_location;
 mod pkce;
@@ -107,6 +108,7 @@ pub fn run() {
             });
 
             tauri::async_runtime::spawn(device_link::run_supervisor(app.handle().clone()));
+            tauri::async_runtime::spawn(live_link::run_supervisor(app.handle().clone()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

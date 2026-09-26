@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import type { ShellTab } from "@/components/shell/shell-tabs";
 import type { NewTaskForm } from "@/components/new-task-dialog";
 import { api, type DesktopTask } from "@/lib/tauri";
@@ -47,6 +48,27 @@ export function useTasks(signedIn: boolean, view: ShellTab) {
     const id = window.setInterval(() => void loadTasks(), 3500);
     return () => window.clearInterval(id);
   }, [signedIn, view, loadTasks]);
+
+  // Live push from vox-core (see src-tauri/src/live_link.rs): a task added
+  // or updated anywhere — a phone call, another device — refetches
+  // immediately instead of waiting for the poll above.
+  useEffect(() => {
+    if (!signedIn) return;
+    let unlisten: (() => void) | undefined;
+    void listen<string>("vox-live-update", (event) => {
+      try {
+        const payload = JSON.parse(event.payload) as { type?: string };
+        if (payload.type === "task_created" || payload.type === "task_updated") {
+          void loadTasks();
+        }
+      } catch {
+        /* ignore malformed frame */
+      }
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten?.();
+  }, [signedIn, loadTasks]);
 
   async function toggleTaskStatus(task: DesktopTask) {
     const next = task.status === "completed" ? "pending" : "completed";
