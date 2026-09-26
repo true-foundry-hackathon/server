@@ -94,9 +94,20 @@ pub fn App() -> Element {
     let mut call_error = use_signal(String::new);
 
     use_future(move || async move {
-        let args = serde_wasm_bindgen::to_value(&EmptyArgs {}).unwrap_or(JsValue::NULL);
-        if let Ok(res) = invoke("get_auth_state", args).await {
-            auth.set(parse_auth_state(&res));
+        loop {
+            sleep_ms(1000).await;
+            if auth().signed_in {
+                continue;
+            }
+            let args = serde_wasm_bindgen::to_value(&EmptyArgs {}).unwrap_or(JsValue::NULL);
+            if let Ok(res) = invoke("get_auth_state", args).await {
+                let next = parse_auth_state(&res);
+                if next.signed_in {
+                    auth.set(next);
+                    auth_busy.set(false);
+                    auth_error.set(String::new());
+                }
+            }
         }
     });
 

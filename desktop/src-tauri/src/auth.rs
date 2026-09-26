@@ -4,6 +4,7 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -16,7 +17,9 @@ use crate::config::PublicConfig;
 
 const SERVICE: &str = "com.voxagent.desktop";
 const ACCOUNT: &str = "auth-session";
+const OAUTH_PENDING_ACCOUNT: &str = "oauth-pending";
 const OAUTH_SCHEME: &str = "vox";
+const OAUTH_PENDING_TTL_SECS: i64 = 600;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StoredSession {
@@ -65,8 +68,14 @@ struct CoreMeResponse {
 }
 
 struct PendingOauth {
-    expected_state: String,
-    tx: oneshot::Sender<Result<String, String>>,
+    tx: oneshot::Sender<Result<AuthState, String>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct PersistedOauth {
+    state: String,
+    verifier: String,
+    created_at_unix: i64,
 }
 
 pub struct AuthManager {
@@ -74,6 +83,9 @@ pub struct AuthManager {
     session: Mutex<Option<StoredSession>>,
     oauth_in_progress: AtomicBool,
     pending_oauth: Mutex<Option<PendingOauth>>,
+    /// Serializes callback handling so duplicate macOS Opened/on_open_url events
+    /// cannot clear pending mid-flight and race the waiting Google sign-in.
+    oauth_finish: tokio::sync::Mutex<()>,
 }
 
 impl AuthManager {
@@ -85,10 +97,12 @@ impl AuthManager {
             session: Mutex::new(session),
             oauth_in_progress: AtomicBool::new(false),
             pending_oauth: Mutex::new(None),
+            oauth_finish: tokio::sync::Mutex::new(()),
         })
     }
 
     pub fn state(&self) -> AuthState {
+        self.pull_session_from_store();
         let session = self.session.lock().ok().and_then(|guard| guard.clone());
         AuthState {
             signed_in: session.is_some(),
@@ -100,19 +114,118 @@ impl AuthManager {
     }
 
     pub fn current_session(&self) -> Option<StoredSession> {
+        self.pull_session_from_store();
         self.session.lock().ok().and_then(|guard| guard.clone())
     }
 
-    pub fn handle_oauth_callback_urls(&self, urls: &[url::Url]) {
-        for callback in urls {
-            if let Err(err) = self.complete_oauth_callback(callback) {
+    fn pull_session_from_store(&self) {
+        let Ok(mut guard) = self.session.lock() else {
+            return;
+        };
+        if guard.is_some() {
+            return;
+        }
+        if let Ok(Some(session)) = load_session() {
+            *guard = Some(session);
+        }
+    }
+
+    /// Completes Google OAuth from a deep link in whatever process macOS opened.
+    pub async fn finish_oauth_from_url(&self, callback: &url::Url) -> Result<AuthState, String> {
+        let _guard = self.oauth_finish.lock().await;
+        let result = self.finish_oauth_inner(callback).await;
+        // Always wake the waiting sign_in_with_google command, whether success or failure.
+        match &result {
+            Ok(state) => {
                 if let Ok(mut pending) = self.pending_oauth.lock() {
-                    if let Some(pending) = pending.take() {
-                        let _ = pending.tx.send(Err(err));
+                    if let Some(p) = pending.take() {
+                        let _ = p.tx.send(Ok(state.clone()));
                     }
                 }
             }
+            Err(err) => {
+                // Duplicate callbacks after a successful finish should not poison the waiter.
+                self.pull_session_from_store();
+                if self.current_session().is_some() {
+                    if let Ok(mut pending) = self.pending_oauth.lock() {
+                        if let Some(p) = pending.take() {
+                            let _ = p.tx.send(Ok(self.state()));
+                        }
+                    }
+                } else {
+                    self.fail_pending(err.clone());
+                }
+            }
         }
+        result
+    }
+
+    async fn finish_oauth_inner(&self, callback: &url::Url) -> Result<AuthState, String> {
+        if callback.scheme() != OAUTH_SCHEME {
+            return Err("Unexpected OAuth callback scheme".to_string());
+        }
+
+        let params = oauth_params(callback);
+        if let Some(error) = params.get("error") {
+            let description = params
+                .get("error_description")
+                .cloned()
+                .unwrap_or_default()
+                .replace('+', " ");
+            let message = format!("Google sign-in failed: {error} {description}");
+            let _ = clear_pending_oauth();
+            return Err(message.trim().to_string());
+        }
+
+        let persisted = match load_pending_oauth()? {
+            Some(pending) => pending,
+            None => {
+                // Another delivery path (or another Vox process) may have already finished.
+                self.pull_session_from_store();
+                if self.current_session().is_some() {
+                    return Ok(self.state());
+                }
+                return Err(
+                    "No sign-in is in progress. Click Continue with Google again in this app."
+                        .to_string(),
+                );
+            }
+        };
+        if now_unix() - persisted.created_at_unix > OAUTH_PENDING_TTL_SECS {
+            let _ = clear_pending_oauth();
+            return Err("Sign-in expired. Click Continue with Google again.".to_string());
+        }
+
+        if let Some(state) = params.get("state") {
+            if state != &persisted.state {
+                return Err("OAuth state mismatch — try signing in again".to_string());
+            }
+        }
+
+        let callback_tokens = if let Some(code) = params.get("code").filter(|v| !v.is_empty()) {
+            self.exchange_auth_code(code, &persisted.verifier).await?
+        } else if let (Some(access_token), Some(refresh_token)) = (
+            params
+                .get("access_token")
+                .filter(|v| !v.is_empty())
+                .cloned(),
+            params
+                .get("refresh_token")
+                .filter(|v| !v.is_empty())
+                .cloned(),
+        ) {
+            SupabaseTokenResponse {
+                access_token,
+                refresh_token,
+                expires_in: None,
+                user: None,
+            }
+        } else {
+            return Err("OAuth callback was missing credentials. Confirm vox://auth/callback is allow-listed in Supabase Auth redirect URLs.".to_string());
+        };
+
+        let _ = clear_pending_oauth();
+        self.establish_session(callback_tokens).await
     }
 
     pub async fn request_email_otp(&self, email: String) -> Result<(), String> {
@@ -230,29 +343,43 @@ impl AuthManager {
             query.append_pair("state", &state);
         }
 
-        let (tx, rx) = oneshot::channel::<Result<String, String>>();
+        let (tx, rx) = oneshot::channel::<Result<AuthState, String>>();
         {
             let mut pending = self
                 .pending_oauth
                 .lock()
                 .map_err(|_| "Sign-in lock unavailable".to_string())?;
-            *pending = Some(PendingOauth {
-                expected_state: state.clone(),
-                tx,
-            });
+            *pending = Some(PendingOauth { tx });
         }
+        save_pending_oauth(&PersistedOauth {
+            state: state.clone(),
+            verifier: verifier.clone(),
+            created_at_unix: now_unix(),
+        })?;
 
         app.opener()
             .open_url(authorize.as_str(), None::<&str>)
             .map_err(|e| format!("Could not open browser: {e}"))?;
 
-        let code = tokio::time::timeout(Duration::from_secs(180), rx)
-            .await
-            .map_err(|_| "Sign-in timed out".to_string())?
-            .map_err(|_| "Sign-in was cancelled".to_string())??;
-
-        let tokens = self.exchange_auth_code(&code, &verifier).await?;
-        self.establish_session(tokens).await
+        match tokio::time::timeout(Duration::from_secs(180), rx).await {
+            Ok(Ok(Ok(state))) => Ok(state),
+            Ok(Ok(Err(err))) => Err(err),
+            Ok(Err(_)) | Err(_) => {
+                // Do NOT clear persisted PKCE here — macOS often delivers vox:// late.
+                // Keep polling keychain so a late callback can still finish sign-in.
+                for _ in 0..60 {
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    self.pull_session_from_store();
+                    if self.current_session().is_some() {
+                        return Ok(self.state());
+                    }
+                }
+                Err(
+                    "Waiting for Google… Quit Vox (Cmd+Q), then click “Open Vox” in the browser. Or click Continue with Google again from this app."
+                        .to_string(),
+                )
+            }
+        }
     }
 
     pub fn sign_out(&self) -> Result<AuthState, String> {
@@ -260,48 +387,16 @@ impl AuthManager {
             *guard = None;
         }
         let _ = clear_session();
+        let _ = clear_pending_oauth();
         Ok(self.state())
     }
 
-    fn complete_oauth_callback(&self, callback: &url::Url) -> Result<(), String> {
-        if callback.scheme() != OAUTH_SCHEME {
-            return Err("Unexpected OAuth callback scheme".to_string());
+    fn fail_pending(&self, err: String) {
+        if let Ok(mut pending) = self.pending_oauth.lock() {
+            if let Some(pending) = pending.take() {
+                let _ = pending.tx.send(Err(err));
+            }
         }
-
-        let params: HashMap<_, _> = callback.query_pairs().into_owned().collect();
-        let mut pending = self
-            .pending_oauth
-            .lock()
-            .map_err(|_| "Sign-in lock unavailable".to_string())?;
-        let Some(pending) = pending.take() else {
-            return Err("No sign-in is waiting for a callback".to_string());
-        };
-
-        if let Some(error) = params.get("error") {
-            let description = params
-                .get("error_description")
-                .cloned()
-                .unwrap_or_default();
-            let _ = pending.tx.send(Err(format!(
-                "Google sign-in failed: {error} {description}"
-            )));
-            return Ok(());
-        }
-
-        let state = params
-            .get("state")
-            .ok_or_else(|| "Missing OAuth state".to_string())?;
-        if state != &pending.expected_state {
-            let _ = pending.tx.send(Err("OAuth state mismatch".to_string()));
-            return Ok(());
-        }
-
-        let code = params
-            .get("code")
-            .cloned()
-            .ok_or_else(|| "Missing OAuth authorization code".to_string())?;
-        let _ = pending.tx.send(Ok(code));
-        Ok(())
     }
 
     async fn exchange_auth_code(
@@ -378,6 +473,55 @@ fn is_allowed_oauth_redirect(redirect_uri: &str) -> bool {
                 && parsed.host_str().unwrap_or("auth") == "auth"
                 && parsed.path() == "/callback"
         })
+}
+
+fn oauth_params(callback: &url::Url) -> HashMap<String, String> {
+    let mut params: HashMap<String, String> = callback.query_pairs().into_owned().collect();
+    if let Some(fragment) = callback.fragment() {
+        for pair in fragment.split('&') {
+            let mut parts = pair.splitn(2, '=');
+            let Some(key) = parts.next() else {
+                continue;
+            };
+            if key.is_empty() {
+                continue;
+            }
+            let value = parts.next().unwrap_or("");
+            let decoded_key = urlencoding_decode(key);
+            let decoded_value = urlencoding_decode(value);
+            params.entry(decoded_key).or_insert(decoded_value);
+        }
+    }
+    params
+}
+
+fn urlencoding_decode(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let bytes = value.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'+' => {
+                out.push(' ');
+                i += 1;
+            }
+            b'%' if i + 2 < bytes.len() => {
+                let hex = &value[i + 1..i + 3];
+                if let Ok(byte) = u8::from_str_radix(hex, 16) {
+                    out.push(byte as char);
+                    i += 3;
+                } else {
+                    out.push('%');
+                    i += 1;
+                }
+            }
+            c => {
+                out.push(c as char);
+                i += 1;
+            }
+        }
+    }
+    out
 }
 
 async fn exchange_with_core(
@@ -466,6 +610,80 @@ fn code_challenge(verifier: &str) -> String {
 
 fn entry() -> Result<Entry, String> {
     Entry::new(SERVICE, ACCOUNT).map_err(|e| format!("Keychain unavailable: {e}"))
+}
+
+fn oauth_pending_entry() -> Result<Entry, String> {
+    Entry::new(SERVICE, OAUTH_PENDING_ACCOUNT)
+        .map_err(|e| format!("Keychain unavailable: {e}"))
+}
+
+fn now_unix() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+fn oauth_pending_file() -> PathBuf {
+    let base = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+    base.join("Library/Application Support")
+        .join(SERVICE)
+        .join("oauth-pending.json")
+}
+
+fn save_pending_oauth(pending: &PersistedOauth) -> Result<(), String> {
+    let payload = serde_json::to_string(pending).map_err(|e| e.to_string())?;
+    // Dual-write: keychain + file. File survives keychain flakiness and helps
+    // when the deep-link lands in a different process than the waiter.
+    let path = oauth_pending_file();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Could not create sign-in state dir: {e}"))?;
+    }
+    std::fs::write(&path, &payload)
+        .map_err(|e| format!("Could not store sign-in state file: {e}"))?;
+    if let Ok(entry) = oauth_pending_entry() {
+        let _ = entry.set_password(&payload);
+    }
+    Ok(())
+}
+
+fn load_pending_oauth() -> Result<Option<PersistedOauth>, String> {
+    if let Ok(entry) = oauth_pending_entry() {
+        match entry.get_password() {
+            Ok(payload) => {
+                let pending = serde_json::from_str(&payload)
+                    .map_err(|e| format!("Stored sign-in state is corrupt: {e}"))?;
+                return Ok(Some(pending));
+            }
+            Err(keyring::Error::NoEntry) => {}
+            Err(e) => eprintln!("keychain oauth-pending read warning: {e}"),
+        }
+    }
+    let path = oauth_pending_file();
+    match std::fs::read_to_string(&path) {
+        Ok(payload) => {
+            let pending = serde_json::from_str(&payload)
+                .map_err(|e| format!("Stored sign-in state file is corrupt: {e}"))?;
+            Ok(Some(pending))
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("Could not read sign-in state file: {e}")),
+    }
+}
+
+fn clear_pending_oauth() -> Result<(), String> {
+    let _ = std::fs::remove_file(oauth_pending_file());
+    match oauth_pending_entry() {
+        Ok(entry) => match entry.delete_credential() {
+            Ok(()) => Ok(()),
+            Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(format!("Could not clear sign-in state: {e}")),
+        },
+        Err(_) => Ok(()),
+    }
 }
 
 fn save_session(session: &StoredSession) -> Result<(), String> {

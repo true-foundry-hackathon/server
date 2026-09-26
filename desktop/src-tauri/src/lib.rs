@@ -8,7 +8,7 @@ use auth::{AuthManager, AuthState};
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tokio::sync::oneshot;
 
@@ -40,6 +40,24 @@ fn status_from_phase(phase: u8, is_running: bool) -> CallStatus {
     CallStatus {
         active: is_running && phase == PHASE_ACTIVE,
         state: state.to_string(),
+    }
+}
+
+fn handle_oauth_callback_urls(app: &AppHandle, urls: &[url::Url]) {
+    for callback in urls.iter().cloned() {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let auth = app.state::<AuthManager>();
+            match auth.finish_oauth_from_url(&callback).await {
+                Ok(state) => {
+                    let _ = app.emit("auth-state", &state);
+                }
+                Err(err) => {
+                    eprintln!("oauth callback failed ({callback}): {err}");
+                    let _ = app.emit("auth-error", err);
+                }
+            }
+        });
     }
 }
 
@@ -201,9 +219,7 @@ pub fn run() {
                 .filter(|url| url.scheme() == "vox")
                 .collect();
             if !urls.is_empty() {
-                if let Some(auth) = app.try_state::<AuthManager>() {
-                    auth.handle_oauth_callback_urls(&urls);
-                }
+                handle_oauth_callback_urls(app, &urls);
             }
         }));
     }
@@ -216,14 +232,24 @@ pub fn run() {
         .setup(|app| {
             #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
             {
-                app.deep_link().register_all()?;
+                if let Err(err) = app.deep_link().register_all() {
+                    eprintln!("deep link registration warning: {err}");
+                }
             }
 
             let handle = app.handle().clone();
-            app.deep_link().on_open_url(move |event| {
-                if let Some(auth) = handle.try_state::<AuthManager>() {
-                    auth.handle_oauth_callback_urls(&event.urls());
+            if let Ok(Some(urls)) = app.deep_link().get_current() {
+                let vox_urls: Vec<_> = urls
+                    .into_iter()
+                    .filter(|url| url.scheme() == "vox")
+                    .collect();
+                if !vox_urls.is_empty() {
+                    handle_oauth_callback_urls(&handle, &vox_urls);
                 }
+            }
+
+            app.deep_link().on_open_url(move |event| {
+                handle_oauth_callback_urls(&handle, &event.urls());
             });
             Ok(())
         })
@@ -237,6 +263,36 @@ pub fn run() {
             end_call,
             call_status
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // macOS delivers custom-scheme opens here when the app is already running.
+            // The deep-link plugin also listens, but RunEvent::Opened is a more reliable backup.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = &event {
+                let vox_urls: Vec<url::Url> = urls
+                    .iter()
+                    .filter_map(|u| url::Url::parse(&u.to_string()).ok())
+                    .filter(|u| u.scheme() == "vox")
+                    .collect();
+                if !vox_urls.is_empty() {
+                    eprintln!("RunEvent::Opened vox urls: {vox_urls:?}");
+                    handle_oauth_callback_urls(app, &vox_urls);
+                }
+            }
+
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                if let Ok(Some(urls)) = app.deep_link().get_current() {
+                    let vox_urls: Vec<_> = urls
+                        .into_iter()
+                        .filter(|url| url.scheme() == "vox")
+                        .collect();
+                    if !vox_urls.is_empty() {
+                        eprintln!("Reopen get_current vox urls: {vox_urls:?}");
+                        handle_oauth_callback_urls(app, &vox_urls);
+                    }
+                }
+            }
+        });
 }
