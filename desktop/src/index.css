@@ -184,6 +184,16 @@ a,
   );
 }
 
+/* Full-bleed grain for widget cards — same generator as .sign-in-noise but
+   unmasked (covers the whole card, not just one corner) and dimmer (the
+   masked, soft-light version read as too bright/white on the widgets). */
+.widget-noise {
+  opacity: 0.12;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
+
 /* Mission-control map chrome */
 .vox-map-host,
 .vox-map-host .maplibregl-map,

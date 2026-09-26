@@ -1,16 +1,9 @@
 import { useEffect, useState } from "react";
-import {
-  AppSidebar,
-  type DesktopView,
-  type SidebarSectionId,
-} from "@/components/app-sidebar";
-import { DashboardView } from "@/components/dashboard-view";
+import { HomeShell } from "@/components/home-shell";
 import { InspectTaskDialog } from "@/components/inspect-task-dialog";
 import { NewTaskDialog, type NewTaskForm } from "@/components/new-task-dialog";
-import { ProjectDetailView } from "@/components/project-detail-view";
-import { ProjectsView } from "@/components/projects-view";
+import type { ShellTab } from "@/components/shell/shell-tabs";
 import { SignInScreen } from "@/components/sign-in-screen";
-import { TasksView } from "@/components/tasks-view";
 import { useAuth } from "@/hooks/use-auth";
 import { useCallSession } from "@/hooks/use-call-session";
 import { useProjects } from "@/hooks/use-projects";
@@ -30,19 +23,15 @@ export default function App() {
   const auth = useAuth();
   const callSession = useCallSession(auth.auth.signed_in);
 
-  const [view, setView] = useState<DesktopView>("dashboard");
-  const tasksHook = useTasks(auth.auth.signed_in, view);
+  const [activeTab, setActiveTab] = useState<ShellTab>("agent");
+  const tasksHook = useTasks(auth.auth.signed_in, activeTab);
   const projectsHook = useProjects(auth.auth.signed_in);
 
-  const [showProfile, setShowProfile] = useState(false);
-  const [activeSection, setActiveSection] = useState<SidebarSectionId | null>(
-    null,
-  );
   const [showNewTask, setShowNewTask] = useState(false);
   const [inspectTask, setInspectTask] = useState<DesktopTask | null>(null);
   const [newTask, setNewTask] = useState<NewTaskForm>(emptyNewTask);
 
-  const { auth: authState, authBusy, authError, googleSignIn } = auth;
+  const { auth: authState, authBusy, authError, googleSignIn, signOut } = auth;
   const {
     callState,
     isActive,
@@ -51,7 +40,6 @@ export default function App() {
     callError,
     toggleCall,
     endCall,
-    resetCallState,
   } = callSession;
   const {
     tasks,
@@ -74,18 +62,16 @@ export default function App() {
     selectedProjectId,
     setSelectedProjectId,
     projectsError,
-    loadCollections,
     createProject,
     archiveProject,
   } = projectsHook;
 
-  // Keyboard shortcuts: Enter-to-talk, Escape priority chain.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (
         e.key === "Enter" &&
         authState.signed_in &&
-        view === "dashboard" &&
+        activeTab === "agent" &&
         !isActive &&
         !isBusy
       ) {
@@ -93,11 +79,9 @@ export default function App() {
       } else if (e.key === "Escape") {
         if (showNewTask) setShowNewTask(false);
         else if (inspectTask) setInspectTask(null);
-        else if (showProfile) setShowProfile(false);
-        else if (view === "projects" && selectedProjectId)
+        else if (activeTab === "projects" && selectedProjectId)
           setSelectedProjectId(null);
-        else if (view === "projects") setView("dashboard");
-        else if (view === "tasks") setView("dashboard");
+        else if (activeTab !== "agent") setActiveTab("agent");
         else if (isActive || callState === "connecting") void endCall();
       }
     };
@@ -106,12 +90,11 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers use latest state via closure refresh
   }, [
     authState.signed_in,
-    view,
+    activeTab,
     isActive,
     isBusy,
     showNewTask,
     inspectTask,
-    showProfile,
     callState,
     selectedProjectId,
   ]);
@@ -120,28 +103,11 @@ export default function App() {
     await googleSignIn(loadTasks);
   }
 
-  async function handleSignOut() {
-    await auth.signOut();
-    resetCallState();
-    setShowProfile(false);
-    setView("dashboard");
-  }
-
   async function handleCreateTask() {
     const created = await createTask(newTask);
     if (created) {
       setNewTask(emptyNewTask);
       setShowNewTask(false);
-    }
-  }
-
-  function handleViewChange(next: DesktopView) {
-    setActiveSection(null);
-    setView(next);
-    if (next === "tasks") void loadTasks();
-    if (next === "projects") {
-      setSelectedProjectId(null);
-      void loadCollections();
     }
   }
 
@@ -153,8 +119,6 @@ export default function App() {
     : isBusy || callState === "connecting"
       ? "Establishing duplex audio link…"
       : "Press the button or hit Return to talk";
-
-  const accountLabel = authState.email ?? authState.user_id ?? "Signed in";
 
   if (!authState.signed_in) {
     return (
@@ -168,88 +132,49 @@ export default function App() {
 
   return (
     <main
-      className="relative flex h-full w-full overflow-hidden bg-void-black"
+      className="relative h-full w-full overflow-hidden bg-void-black"
       tabIndex={0}
     >
-      <AppSidebar
-        view={view}
+      <HomeShell
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        accountLabel={authState.email ?? authState.user_id ?? "Signed in"}
+        onSignOut={() => void signOut()}
+        isActive={isActive}
+        callState={callState}
+        label={label}
+        subLabel={subLabel}
+        callError={callError}
+        onToggleCall={() => void toggleCall()}
         pendingCount={pendingCount}
-        activeSection={activeSection}
-        showProfile={showProfile}
-        accountLabel={accountLabel}
-        bridgeUrl={authState.bridge_url}
-        onViewChange={handleViewChange}
-        onSelectSection={setActiveSection}
-        onToggleProfile={() => setShowProfile((v) => !v)}
-        onSignOut={() => void handleSignOut()}
+        tasks={tasks}
+        totalTasks={totalTasks}
+        page={page}
+        totalPages={totalPages}
+        pageSize={PAGE_SIZE}
+        filter={filter}
+        search={search}
+        tasksLoading={tasksLoading}
+        onFilterChange={(v) => {
+          setFilter(v);
+          setPage(1);
+        }}
+        onSearchChange={(v) => {
+          setSearch(v);
+          setPage(1);
+        }}
+        onReloadTasks={() => void loadTasks()}
+        onNewTask={() => setShowNewTask(true)}
+        onPageChange={setPage}
+        onToggleTaskStatus={(task) => void toggleTaskStatus(task)}
+        onInspectTask={setInspectTask}
+        collections={collections}
+        projectsError={projectsError}
+        selectedProjectId={selectedProjectId}
+        onSelectProject={setSelectedProjectId}
+        onCreateProject={createProject}
+        onArchiveProject={(id) => void archiveProject(id)}
       />
-
-      <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-        <div
-          className="absolute inset-x-0 top-0 z-30 h-9"
-          data-tauri-drag-region
-        />
-        {view === "dashboard" ? (
-          <DashboardView
-            isActive={isActive}
-            isSpeaking={isSpeaking}
-            callState={callState}
-            label={label}
-            subLabel={subLabel}
-            callError={callError}
-            activeSection={activeSection}
-            onToggleCall={() => void toggleCall()}
-          />
-        ) : view === "tasks" ? (
-          <TasksView
-            tasks={tasks}
-            totalTasks={totalTasks}
-            page={page}
-            totalPages={totalPages}
-            pageSize={PAGE_SIZE}
-            filter={filter}
-            search={search}
-            tasksLoading={tasksLoading}
-            onFilterChange={(v) => {
-              setFilter(v);
-              setPage(1);
-            }}
-            onSearchChange={(v) => {
-              setSearch(v);
-              setPage(1);
-            }}
-            onReload={() => void loadTasks()}
-            onNewTask={() => setShowNewTask(true)}
-            onCollapse={() => setView("dashboard")}
-            onPageChange={setPage}
-            onToggleStatus={(task) => void toggleTaskStatus(task)}
-            onInspect={setInspectTask}
-          />
-        ) : selectedProjectId ? (
-          <ProjectDetailView
-            project={
-              collections.find((c) => c.id === selectedProjectId) ?? {
-                id: selectedProjectId,
-                name: "Project",
-                description: "",
-                kind: "project",
-                status: "active",
-              }
-            }
-            onBack={() => setSelectedProjectId(null)}
-            onInspectTask={setInspectTask}
-          />
-        ) : (
-          <ProjectsView
-            collections={collections}
-            error={projectsError}
-            onSelectProject={setSelectedProjectId}
-            onCreateProject={createProject}
-            onArchiveProject={(id) => void archiveProject(id)}
-            onCollapse={() => setView("dashboard")}
-          />
-        )}
-      </section>
 
       <NewTaskDialog
         open={showNewTask}
