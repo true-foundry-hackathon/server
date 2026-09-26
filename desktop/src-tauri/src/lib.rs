@@ -294,6 +294,7 @@ impl TaskManager {
                 };
                 let matches_collection = match args.collection_id.as_deref() {
                     None => true,
+                    Some(cid) if cid.is_empty() => true,
                     Some(cid) => t.collection_id.as_deref() == Some(cid),
                 };
                 matches_status && matches_search && matches_collection
