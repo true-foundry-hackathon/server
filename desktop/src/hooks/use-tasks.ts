@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import type { DesktopView } from "@/components/app-sidebar";
+import type { ShellTab } from "@/components/shell/shell-tabs";
 import type { NewTaskForm } from "@/components/new-task-dialog";
 import { api, type DesktopTask } from "@/lib/tauri";
 
 export const PAGE_SIZE = 10;
 
-export function useTasks(signedIn: boolean, view: DesktopView) {
+export function useTasks(signedIn: boolean, view: ShellTab) {
   const [tasks, setTasks] = useState<DesktopTask[]>([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [page, setPage] = useState(1);
