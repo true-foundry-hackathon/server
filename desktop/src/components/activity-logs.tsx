@@ -51,7 +51,7 @@ export function ActivityLogs() {
   return (
     <div
       aria-label="Activity Logs"
-      className="pointer-events-auto absolute top-10 right-4 z-30 flex max-h-[55vh] w-[320px] flex-col overflow-hidden bg-transparent select-text opacity-45 transition-opacity duration-300 hover:opacity-85"
+      className="pointer-events-auto absolute top-10 right-4 z-30 flex max-h-[55vh] w-[340px] flex-col overflow-hidden bg-transparent select-text opacity-50 transition-opacity duration-300 hover:opacity-90"
     >
       <div
         ref={scrollRef}
@@ -67,15 +67,17 @@ export function ActivityLogs() {
               return (
                 <div
                   key={ev.id}
-                  className="font-mono text-[11px] leading-relaxed break-words text-zinc-300"
+                  className="flex items-baseline justify-between gap-2.5 font-mono text-[11px] leading-relaxed"
                 >
-                  <span className="text-[9.5px] text-zinc-500 mr-1.5 select-none font-sans">
+                  <div className="min-w-0 flex-1 break-words text-zinc-300">
+                    <span className="text-[#ff6363] font-semibold mr-1.5 select-none">
+                      $
+                    </span>
+                    <span className="font-medium text-white">{cleanCmd}</span>
+                  </div>
+                  <span className="shrink-0 text-right font-sans text-[9px] text-zinc-500/80 select-none">
                     {ev.timestamp}
                   </span>
-                  <span className="text-[#ff6363] font-semibold mr-1 select-none">
-                    $
-                  </span>
-                  <span className="font-medium text-white">{cleanCmd}</span>
                 </div>
               );
             }
@@ -84,12 +86,14 @@ export function ActivityLogs() {
               return (
                 <div
                   key={ev.id}
-                  className="font-mono text-[10.5px] leading-snug break-words text-zinc-400 pl-2 border-l border-white/15 ml-0.5"
+                  className="flex items-baseline justify-between gap-2.5 font-mono text-[10.5px] leading-snug"
                 >
-                  <span className="text-[9.5px] text-zinc-600/70 mr-1 select-none font-sans">
+                  <div className="min-w-0 flex-1 break-words text-zinc-400 pl-2 border-l border-white/15 ml-0.5">
+                    <span>{ev.text}</span>
+                  </div>
+                  <span className="shrink-0 text-right font-sans text-[9px] text-zinc-600/70 select-none">
                     {ev.timestamp}
                   </span>
-                  <span>{ev.text}</span>
                 </div>
               );
             }
@@ -98,13 +102,15 @@ export function ActivityLogs() {
               return (
                 <div
                   key={ev.id}
-                  className="font-mono text-[10.5px] leading-relaxed break-words text-emerald-400/90"
+                  className="flex items-baseline justify-between gap-2.5 font-mono text-[10.5px] leading-relaxed"
                 >
-                  <span className="text-[9.5px] text-zinc-600/70 mr-1.5 select-none font-sans">
+                  <div className="min-w-0 flex-1 break-words text-emerald-400/90">
+                    <span className="mr-1.5 text-emerald-400 select-none">✓</span>
+                    <span>{ev.text}</span>
+                  </div>
+                  <span className="shrink-0 text-right font-sans text-[9px] text-zinc-600/70 select-none">
                     {ev.timestamp}
                   </span>
-                  <span className="mr-1 text-emerald-400 select-none">✓</span>
-                  <span>{ev.text}</span>
                 </div>
               );
             }
@@ -113,13 +119,15 @@ export function ActivityLogs() {
               return (
                 <div
                   key={ev.id}
-                  className="font-mono text-[10.5px] leading-relaxed break-words text-[#ff6363]"
+                  className="flex items-baseline justify-between gap-2.5 font-mono text-[10.5px] leading-relaxed"
                 >
-                  <span className="text-[9.5px] text-zinc-600/70 mr-1.5 select-none font-sans">
+                  <div className="min-w-0 flex-1 break-words text-[#ff6363]">
+                    <span className="mr-1.5 select-none">✗</span>
+                    <span>{ev.text}</span>
+                  </div>
+                  <span className="shrink-0 text-right font-sans text-[9px] text-zinc-600/70 select-none">
                     {ev.timestamp}
                   </span>
-                  <span className="mr-1 select-none">✗</span>
-                  <span>{ev.text}</span>
                 </div>
               );
             }
@@ -128,13 +136,15 @@ export function ActivityLogs() {
               return (
                 <div
                   key={ev.id}
-                  className="font-mono text-[10.5px] leading-relaxed break-words text-zinc-500"
+                  className="flex items-baseline justify-between gap-2.5 font-mono text-[10.5px] leading-relaxed"
                 >
-                  <span className="text-[9.5px] text-zinc-600/70 mr-1.5 select-none font-sans">
+                  <div className="min-w-0 flex-1 break-words text-zinc-400">
+                    <span className="text-zinc-500 mr-1.5 select-none">→</span>
+                    <span>{ev.text}</span>
+                  </div>
+                  <span className="shrink-0 text-right font-sans text-[9px] text-zinc-600/70 select-none">
                     {ev.timestamp}
                   </span>
-                  <span className="text-zinc-600 mr-1 select-none">→</span>
-                  <span>{ev.text}</span>
                 </div>
               );
             }
@@ -143,13 +153,15 @@ export function ActivityLogs() {
             return (
               <div
                 key={ev.id}
-                className="font-mono text-[10.5px] leading-relaxed break-words text-zinc-500 italic"
+                className="flex items-baseline justify-between gap-2.5 font-mono text-[10.5px] leading-relaxed"
               >
-                <span className="text-[9.5px] text-zinc-600/70 mr-1.5 select-none font-sans">
+                <div className="min-w-0 flex-1 break-words text-zinc-400 italic">
+                  <span className="text-zinc-500 mr-1.5 select-none">•</span>
+                  <span>{ev.text}</span>
+                </div>
+                <span className="shrink-0 text-right font-sans text-[9px] text-zinc-600/70 select-none">
                   {ev.timestamp}
                 </span>
-                <span className="text-zinc-600 mr-1 select-none">•</span>
-                <span>{ev.text}</span>
               </div>
             );
           })}
