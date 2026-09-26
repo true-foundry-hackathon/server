@@ -70,15 +70,30 @@ jobs:
         with:
           projectPath: src-tauri
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag_name || format('desktop-{0}', github.sha) }}
-          releaseName: Vox Desktop ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag_name || github.sha }}
+          releaseName: Vox ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag_name || github.sha }}
           releaseBody: |
-            Desktop voice client build (Apple Silicon).
+            Vox desktop voice client (Apple Silicon).
 
-            Google sign-in redirect (add in Supabase Auth URL config):
-            `vox://auth/callback`
+            ## Install (unsigned build)
+            macOS may say the app is “damaged” because Gatekeeper quarantines unsigned downloads.
+            After installing `Vox.app`, run:
 
-            Unsigned builds: right-click → Open the first time (Gatekeeper).
-            Add `APPLE_CERTIFICATE` (+ password / identity / notarization secrets) later for signed releases.
+            ```
+            xattr -cr /Applications/Vox.app
+            ```
+
+            Or if it is still in Downloads:
+
+            ```
+            xattr -cr ~/Downloads/Vox*.dmg ~/Downloads/Vox*.app 2>/dev/null
+            xattr -cr /Applications/Vox.app
+            ```
+
+            Then open **Vox** normally.
+
+            Google sign-in redirect (Supabase Auth URL config): `vox://auth/callback`
+
+            Add `APPLE_CERTIFICATE` (+ password / identity / notarization secrets) for signed/notarized releases that skip this step.
           releaseDraft: true
           prerelease: false
           args: --target aarch64-apple-darwin

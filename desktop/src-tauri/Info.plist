@@ -4,6 +4,10 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Vox needs microphone access for live voice conversations.</string>
+	<key>CFBundleDisplayName</key>
+	<string>Vox</string>
+	<key>CFBundleName</key>
+	<string>Vox</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

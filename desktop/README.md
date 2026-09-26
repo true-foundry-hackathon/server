@@ -39,6 +39,21 @@ On macOS, deep links for a custom scheme are most reliable with an installed/bun
 
 Nothing secret to Vox servers (service tokens, host secrets, JWT signing keys) is shipped in the app.
 
+## Install from GitHub Release
+
+Download the Apple Silicon `.dmg` from the draft release, open it, and drag **Vox** to Applications.
+
+Unsigned CI builds are quarantined by Gatekeeper and macOS may show *“Vox.app is damaged”*. Clear quarantine, then open:
+
+```sh
+xattr -cr /Applications/Vox.app
+# if the old build was named vox-desktop.app:
+xattr -cr /Applications/vox-desktop.app
+open /Applications/Vox.app
+```
+
+Signed/notarized builds (Apple Developer cert secrets in the release workflow) will not need this.
+
 ## Release pipeline
 
 GitHub Actions workflow `.github/workflows/release.yml` builds installers when you push a `v*` tag or run the workflow manually.
