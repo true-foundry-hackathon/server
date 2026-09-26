@@ -1,4 +1,6 @@
 mod app;
+mod icons;
+mod orb;
 
 use app::App;
 use dioxus::prelude::*;

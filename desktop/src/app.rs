@@ -1,5 +1,7 @@
 #![allow(non_snake_case)]
 
+use crate::icons::{CoralDiamond, GoogleIcon, Kbd, PhoneIcon, PhoneOffIcon};
+use crate::orb::{OrbState, ThinkingOrbScript, VoxLogo};
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
@@ -15,17 +17,6 @@ extern "C" {
 
 #[derive(Serialize, Deserialize)]
 struct EmptyArgs {}
-
-#[derive(Serialize, Deserialize)]
-struct EmailArgs<'a> {
-    email: &'a str,
-}
-
-#[derive(Serialize, Deserialize)]
-struct VerifyArgs<'a> {
-    email: &'a str,
-    code: &'a str,
-}
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 struct AuthState {
@@ -83,9 +74,6 @@ fn status_label(state: &str, error: &str) -> String {
 
 pub fn App() -> Element {
     let mut auth = use_signal(AuthState::default);
-    let mut email = use_signal(String::new);
-    let mut otp_code = use_signal(String::new);
-    let mut otp_sent = use_signal(|| false);
     let mut auth_busy = use_signal(|| false);
     let mut auth_error = use_signal(String::new);
     let mut call_state = use_signal(|| "idle".to_string());
@@ -132,47 +120,6 @@ pub fn App() -> Element {
             }
         }
     });
-
-    let send_code = move |_| async move {
-        auth_busy.set(true);
-        auth_error.set(String::new());
-        let args = serde_wasm_bindgen::to_value(&EmailArgs {
-            email: &email.read(),
-        })
-        .unwrap_or(JsValue::NULL);
-        match invoke("request_email_otp", args).await {
-            Ok(_) => {
-                otp_sent.set(true);
-                auth_busy.set(false);
-            }
-            Err(err) => {
-                auth_error.set(invoke_error_message(&err));
-                auth_busy.set(false);
-            }
-        }
-    };
-
-    let verify_code = move |_| async move {
-        auth_busy.set(true);
-        auth_error.set(String::new());
-        let args = serde_wasm_bindgen::to_value(&VerifyArgs {
-            email: &email.read(),
-            code: &otp_code.read(),
-        })
-        .unwrap_or(JsValue::NULL);
-        match invoke("verify_email_otp", args).await {
-            Ok(res) => {
-                auth.set(parse_auth_state(&res));
-                auth_busy.set(false);
-                otp_sent.set(false);
-                otp_code.set(String::new());
-            }
-            Err(err) => {
-                auth_error.set(invoke_error_message(&err));
-                auth_busy.set(false);
-            }
-        }
-    };
 
     let google_sign_in = move |_| async move {
         auth_busy.set(true);
@@ -242,20 +189,32 @@ pub fn App() -> Element {
     };
 
     let signed_in = auth().signed_in;
-    let state_now = call_state();
     let active_now = is_active();
     let busy_now = is_busy();
+    let state_now = call_state();
     let err_now = call_error();
     let label = status_label(&state_now, &err_now);
-    let stage_class = if active_now {
-        "stage stage-live"
+
+    let orb_state = if active_now {
+        OrbState::Active
     } else if state_now == "connecting" || busy_now {
-        "stage stage-connecting"
+        OrbState::Connecting
     } else if !err_now.is_empty() {
-        "stage stage-error"
+        OrbState::Error
     } else {
-        "stage"
+        OrbState::Idle
     };
+
+    let sub_label = if active_now {
+        "Duplex audio channel active • Opus 48kHz"
+    } else if state_now == "connecting" || busy_now {
+        "Negotiating WebRTC & authentication…"
+    } else if !err_now.is_empty() {
+        "Connection interrupted. Check bridge status."
+    } else {
+        "Your voice shortcut to everything. Press Return to talk."
+    };
+
     let account_label = auth()
         .email
         .clone()
@@ -264,110 +223,213 @@ pub fn App() -> Element {
 
     rsx! {
         link { rel: "stylesheet", href: CSS }
+        ThinkingOrbScript {}
         main {
-            class: "shell",
-            header {
-                class: "brand",
-                h1 { "Vox" }
-                p { class: "brand-sub", "Voice" }
-            }
-
-            if !signed_in {
-                section {
-                    class: "auth",
-                    h2 { "Sign in" }
-                    p { class: "auth-copy", "Use your Vox account to talk to your agent." }
-
-                    button {
-                        class: "btn btn-secondary",
-                        onclick: google_sign_in,
-                        disabled: auth_busy(),
-                        "Continue with Google"
-                    }
-
-                    div { class: "auth-divider", span { "or" } }
-
-                    div {
-                        class: "field",
-                        label { r#for: "email", "Email" }
-                        input {
-                            id: "email",
-                            r#type: "email",
-                            value: "{email}",
-                            disabled: auth_busy(),
-                            oninput: move |e| email.set(e.value()),
-                            placeholder: "you@example.com",
-                            autocomplete: "username",
+            class: "raycast-shell",
+            "data-tauri-drag-region": "true",
+            tabindex: "0",
+            onkeydown: move |e: KeyboardEvent| {
+                let key_str = e.key().to_string();
+                if key_str == "Enter" && signed_in && !active_now && !busy_now {
+                    spawn(async move {
+                        if is_busy() || is_active() || !auth().signed_in {
+                            return;
                         }
-                    }
-
-                    if otp_sent() {
-                        div {
-                            class: "field",
-                            label { r#for: "otp", "Code" }
-                            input {
-                                id: "otp",
-                                value: "{otp_code}",
-                                disabled: auth_busy(),
-                                oninput: move |e| otp_code.set(e.value()),
-                                placeholder: "6-digit code",
-                                autocomplete: "one-time-code",
+                        is_busy.set(true);
+                        call_error.set(String::new());
+                        call_state.set("connecting".to_string());
+                        let args = serde_wasm_bindgen::to_value(&EmptyArgs {}).unwrap_or(JsValue::NULL);
+                        match invoke("start_call", args).await {
+                            Ok(res) => {
+                                let status = parse_call_status(&res);
+                                if status.state == "active" || status.active {
+                                    call_state.set("active".to_string());
+                                    is_active.set(true);
+                                    is_busy.set(false);
+                                } else {
+                                    call_state.set("idle".to_string());
+                                    is_active.set(false);
+                                    is_busy.set(false);
+                                    call_error.set(invoke_error_message(&res));
+                                }
+                            }
+                            Err(err) => {
+                                call_state.set("idle".to_string());
+                                is_active.set(false);
+                                is_busy.set(false);
+                                call_error.set(invoke_error_message(&err));
                             }
                         }
-                        button {
-                            class: "btn btn-start",
-                            onclick: verify_code,
-                            disabled: auth_busy(),
-                            "Verify and continue"
-                        }
-                    } else {
-                        button {
-                            class: "btn btn-start",
-                            onclick: send_code,
-                            disabled: auth_busy(),
-                            "Send sign-in code"
+                    });
+                } else if key_str == "Escape" && (active_now || state_now == "connecting") {
+                    spawn(async move {
+                        let args = serde_wasm_bindgen::to_value(&EmptyArgs {}).unwrap_or(JsValue::NULL);
+                        let _ = invoke("end_call", args).await;
+                        call_state.set("idle".to_string());
+                        is_active.set(false);
+                        is_busy.set(false);
+                        call_error.set(String::new());
+                    });
+                }
+            },
+
+            if !signed_in {
+                div {
+                    class: "intro-layout",
+                    div {
+                        class: "intro-orb-hero",
+                        VoxLogo {
+                            size: 120,
+                            animated: true,
+                            state: if auth_busy() {
+                                OrbState::Connecting
+                            } else if !auth_error().is_empty() {
+                                OrbState::Error
+                            } else {
+                                OrbState::Idle
+                            },
                         }
                     }
-
-                    if !auth_error().is_empty() {
-                        p { class: "error-text", "{auth_error}" }
+                    div {
+                        class: "intro-container",
+                        div {
+                            class: "brand-lockup",
+                            CoralDiamond {},
+                            h1 { class: "brand-title", "Vox" }
+                            span { class: "brand-badge", "Desktop" }
+                        }
+                        p {
+                            class: "brand-description",
+                            "Use your Vox account to talk to your agent."
+                        }
+                        div {
+                            class: "auth-panel",
+                            button {
+                                class: "btn-primary-mist",
+                                onclick: google_sign_in,
+                                disabled: auth_busy(),
+                                GoogleIcon {},
+                                span {
+                                    if auth_busy() {
+                                        "Waiting for Google…"
+                                    } else {
+                                        "Continue with Google"
+                                    }
+                                }
+                            }
+                            if !auth_error().is_empty() {
+                                div { class: "callout-error", "{auth_error}" }
+                            }
+                        }
+                        footer {
+                            class: "footer-strip",
+                            span { "v0.1.0" }
+                            span { class: "footer-sep", "|" }
+                            span { "macOS 13+" }
+                            span { class: "footer-sep", "|" }
+                            span { "voxagent.in" }
+                        }
                     }
                 }
             } else {
-                section {
-                    class: "account",
-                    p { class: "account-label", "{account_label}" }
-                    button {
-                        class: "text-btn",
-                        onclick: sign_out,
-                        "Sign out"
-                    }
-                }
-
-                section {
-                    class: "{stage_class}",
-                    aria_live: "polite",
-                    div {
-                        class: "presence",
-                        span { class: "presence-dot" }
-                    }
-                    p { class: "status-label", "{label}" }
-                    div {
-                        class: "call-actions",
-                        if active_now || state_now == "connecting" {
-                            button {
-                                class: "btn btn-end",
-                                onclick: end_call,
-                                "End Call"
+                div {
+                    class: "cockpit-view",
+                    header {
+                        class: "cockpit-header",
+                        div {
+                            class: "cockpit-brand",
+                            CoralDiamond {},
+                            VoxLogo {
+                                size: 20,
+                                animated: true,
+                                state: orb_state,
                             }
-                        } else {
+                            span { class: "brand-label", "Vox" }
+                            span { class: "brand-badge", "Desktop" }
+                        }
+                        div {
+                            class: "account-pill",
+                            span { class: "account-email", "{account_label}" }
                             button {
-                                class: "btn btn-start",
-                                onclick: start_call,
-                                disabled: busy_now,
-                                "Start Call"
+                                class: "btn-signout",
+                                onclick: sign_out,
+                                "Sign out"
                             }
                         }
+                    }
+
+                    section {
+                        class: "cockpit-card",
+                        div {
+                            class: "orb-stage-wrapper",
+                            VoxLogo {
+                                size: 120,
+                                animated: true,
+                                state: orb_state,
+                            }
+                        }
+                        h2 { class: "cockpit-status-title", "{label}" }
+                        p { class: "cockpit-status-sub", "{sub_label}" }
+
+                        div {
+                            class: "call-action-group",
+                            if active_now || state_now == "connecting" {
+                                button {
+                                    class: "btn-end-call",
+                                    onclick: end_call,
+                                    PhoneOffIcon {},
+                                    span { "End Call" }
+                                    Kbd { "Esc" }
+                                }
+                            } else {
+                                button {
+                                    class: "btn-start-call",
+                                    onclick: start_call,
+                                    disabled: busy_now,
+                                    PhoneIcon {},
+                                    span { "Start Call" }
+                                    Kbd { "↵ Return" }
+                                }
+                            }
+                        }
+                    }
+
+                    div {
+                        class: "telemetry-grid",
+                        div {
+                            class: "telemetry-tile",
+                            span { class: "tile-label", "Bridge" }
+                            span {
+                                class: "tile-value",
+                                span {
+                                    class: if active_now || state_now == "connecting" {
+                                        "status-dot-coral"
+                                    } else {
+                                        "status-dot-live"
+                                    }
+                                }
+                                if active_now { "Duplex" } else { "Online" }
+                            }
+                        }
+                        div {
+                            class: "telemetry-tile",
+                            span { class: "tile-label", "Latency" }
+                            span { class: "tile-value", "< 180ms" }
+                        }
+                        div {
+                            class: "telemetry-tile",
+                            span { class: "tile-label", "Engine" }
+                            span { class: "tile-value", "Opus 48k" }
+                        }
+                    }
+
+                    footer {
+                        class: "footer-strip",
+                        span { "v0.1.0" }
+                        span { class: "footer-sep", "|" }
+                        span { "CoreAudio" }
+                        span { class: "footer-sep", "|" }
+                        span { "bridge.voxagent.in" }
                     }
                 }
             }
