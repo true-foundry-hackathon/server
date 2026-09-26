@@ -6,6 +6,7 @@ mod config;
 mod deep_link;
 mod device_link;
 mod live_link;
+mod local_llm;
 #[cfg(target_os = "macos")]
 mod macos_location;
 mod pkce;
@@ -78,6 +79,7 @@ pub fn run() {
         .manage(task_store::TaskManager::new())
         .manage(device_link::DeviceLinkState::default())
         .manage(device_link::RemoteControl::load())
+        .manage(device_link::LocalModelReady::load())
         .manage(device_link::EventLog::default())
         .manage(SystemStatsState::new())
         .on_window_event(|window, event| {
@@ -132,7 +134,12 @@ pub fn run() {
             device_link::get_remote_control,
             device_link::set_remote_control,
             device_link::get_local_events,
+            device_link::is_local_model_ready,
             system_stats::get_system_stats,
+            local_llm::is_local_llm_downloaded,
+            local_llm::download_local_llm,
+            #[cfg(any(target_os = "macos", windows))]
+            local_llm::test_local_llm,
             #[cfg(target_os = "macos")]
             macos_location::get_native_location
         ])

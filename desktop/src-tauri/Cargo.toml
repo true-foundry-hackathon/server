@@ -23,7 +23,7 @@ cpal = "0.15"
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = { version = "0.26", features = ["rustls-tls-native-roots"] }
 futures-util = "0.3"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 uuid = { version = "1", features = ["v4"] }
 keyring = "3"
 base64 = "0.22"
@@ -42,3 +42,7 @@ tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSArray", "NSError", "NSObject", "NSString"] }
 objc2-core-location = { version = "0.3", features = ["CLLocation", "CLLocationManager", "CLLocationManagerDelegate"] }
+llama-cpp-2 = { version = "0.1", features = ["metal"] }
+
+[target.'cfg(windows)'.dependencies]
+llama-cpp-2 = "0.1"

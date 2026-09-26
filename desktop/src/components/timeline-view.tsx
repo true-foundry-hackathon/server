@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LocalLlmCard } from "@/components/local-llm-card";
 import { TimelineLane } from "@/components/timeline-lane";
 import { useTimeline } from "@/hooks/use-timeline";
 import type { TimelineEntry } from "@/lib/tauri";
@@ -8,6 +9,7 @@ const LANES: { source: TimelineEntry["source"]; label: string }[] = [
   { source: "task", label: "Tasks" },
   { source: "schedule", label: "Schedules" },
   { source: "reminder", label: "Reminders" },
+  { source: "device", label: "Device" },
 ];
 
 function formatDay(date: Date): string {
@@ -34,6 +36,7 @@ export function TimelineView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <LocalLlmCard />
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
         <p className="font-mono text-xs text-smoke">
           {formatDay(windowStart)} – {formatDay(windowEnd)}

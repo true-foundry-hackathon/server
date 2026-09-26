@@ -94,7 +94,7 @@ export type UpdateTaskPayload = {
 
 export type TimelineEntry = {
   id: string;
-  source: "task" | "schedule" | "reminder";
+  source: "task" | "schedule" | "reminder" | "device";
   title: string;
   status: string;
   kind: "completed" | "scheduled" | "overdue";
@@ -107,6 +107,13 @@ export type TimelineEntry = {
 export type GetTimelineArgs = {
   from: string;
   to: string;
+};
+
+export type LocalLlmDownloadProgress = {
+  downloaded_bytes: number;
+  total_bytes?: number | null;
+  done: boolean;
+  error?: string | null;
 };
 
 export const api = {
@@ -122,6 +129,9 @@ export const api = {
     invoke<PaginatedTasks>("get_tasks", { args: args ?? null }),
   getTimeline: (args: GetTimelineArgs) =>
     invoke<TimelineEntry[]>("get_timeline", args),
+  isLocalLlmDownloaded: () => invoke<boolean>("is_local_llm_downloaded"),
+  downloadLocalLlm: () => invoke<void>("download_local_llm"),
+  isLocalModelReady: () => invoke<boolean>("is_local_model_ready"),
   createTask: (payload: CreateTaskPayload) =>
     invoke<DesktopTask>("create_task", { payload }),
   updateTask: (payload: UpdateTaskPayload) =>

@@ -119,6 +119,44 @@ fn remote_control_path() -> PathBuf {
     vox_config_dir().join("remote_control_enabled")
 }
 
+/// Whether the local Gemma model has been downloaded — the capability signal
+/// is "has the model," not a hardware guess. Set once by a successful
+/// download; there's no separate on/off toggle for v1, since a multi-GB
+/// model the user just fetched should just work.
+pub struct LocalModelReady(pub(crate) watch::Sender<bool>);
+
+impl LocalModelReady {
+    pub fn load() -> Self {
+        Self(watch::Sender::new(crate::local_llm::is_model_downloaded()))
+    }
+}
+
+#[tauri::command]
+pub fn is_local_model_ready(state: State<'_, LocalModelReady>) -> bool {
+    *state.0.borrow()
+}
+
+/// Combines remote-control consent and local-model readiness into one
+/// signal: the device socket should be open whenever either capability
+/// needs it, even though they're independent consents.
+fn combined_link_enabled(app: &AppHandle) -> watch::Receiver<bool> {
+    let mut remote = app.state::<RemoteControl>().0.subscribe();
+    let mut local = app.state::<LocalModelReady>().0.subscribe();
+    let (tx, rx) = watch::channel(*remote.borrow() || *local.borrow());
+    tokio::spawn(async move {
+        loop {
+            if tx.send(*remote.borrow() || *local.borrow()).is_err() {
+                break;
+            }
+            tokio::select! {
+                res = remote.changed() => if res.is_err() { break },
+                res = local.changed() => if res.is_err() { break },
+            }
+        }
+    });
+    rx
+}
+
 #[tauri::command]
 pub fn get_remote_control(state: State<'_, RemoteControl>) -> bool {
     *state.0.borrow()
@@ -158,7 +196,7 @@ struct RegisterDeviceResponse {
     id: String,
 }
 
-fn vox_config_dir() -> PathBuf {
+pub(crate) fn vox_config_dir() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let dir = PathBuf::from(home).join(".config").join("vox");
     let _ = std::fs::create_dir_all(&dir);
@@ -205,6 +243,7 @@ async fn register_device(
     vox_token: &str,
     device_identifier: &str,
     execution_consent: bool,
+    local_llm_ready: bool,
 ) -> Result<String, String> {
     let client = reqwest::Client::new();
     let url = format!("{}/v1/devices", api_url.trim_end_matches('/'));
@@ -213,6 +252,7 @@ async fn register_device(
         "platform": format!("macos-{}", std::env::consts::ARCH),
         "label": device_label(),
         "execution_consent": execution_consent,
+        "capabilities": { "local_llm": local_llm_ready, "local_llm_model": "gemma-2b" },
     });
     let resp = client
         .post(&url)
@@ -303,8 +343,42 @@ async fn handle_frame(app: &AppHandle, terminal: &TerminalManager, frame: Value)
             log_remote_command(&logged, outcome);
             response
         }
+        "classify_sms" => classify_sms_frame(id, &frame).await,
         _ => json!({ "id": id, "ok": false, "error": "unknown command" }),
     }
+}
+
+#[cfg(any(target_os = "macos", windows))]
+async fn classify_sms_frame(id: Value, frame: &Value) -> Value {
+    let sender = frame
+        .get("sender")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let body = frame
+        .get("body")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+
+    let result =
+        tokio::task::spawn_blocking(move || crate::local_llm::classify_sms_cached(&sender, &body))
+            .await;
+    match result {
+        Ok(Ok(event)) => json!({
+            "id": id,
+            "relevant": event.relevant,
+            "category": event.category,
+            "title": event.title,
+        }),
+        Ok(Err(err)) => json!({ "id": id, "ok": false, "error": err }),
+        Err(err) => json!({ "id": id, "ok": false, "error": err.to_string() }),
+    }
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
+async fn classify_sms_frame(id: Value, _frame: &Value) -> Value {
+    json!({ "id": id, "ok": false, "error": "local model not supported on this platform" })
 }
 
 async fn connect_and_serve(
@@ -373,7 +447,8 @@ async fn connect_and_serve(
 pub async fn run_supervisor(app: AppHandle) {
     let terminal = TerminalManager::default();
     let device_identifier = local_device_identifier();
-    let mut consent = app.state::<RemoteControl>().0.subscribe();
+    let mut remote_control = app.state::<RemoteControl>().0.subscribe();
+    let mut link_enabled = combined_link_enabled(&app);
 
     loop {
         let link = app.state::<DeviceLinkState>();
@@ -388,27 +463,38 @@ pub async fn run_supervisor(app: AppHandle) {
         };
         let api_url = auth.config().api_url.clone();
 
-        let enabled = *consent.borrow_and_update();
+        let remote_enabled = *remote_control.borrow_and_update();
+        let local_ready = *app.state::<LocalModelReady>().0.borrow();
+        let enabled = remote_enabled || local_ready;
         if !enabled {
             link.0.store(LINK_DISABLED, Ordering::SeqCst);
-            // Tell Core consent is withdrawn, then wait for it to be granted.
-            let _ = register_device(&api_url, &session.vox_token, &device_identifier, false).await;
-            emit_local_event(&app, "status", "Remote control currently disabled");
-            let _ = consent.wait_for(|enabled| *enabled).await;
+            // Tell Core consent is withdrawn, then wait for either capability.
+            let _ =
+                register_device(&api_url, &session.vox_token, &device_identifier, false, false)
+                    .await;
+            emit_local_event(&app, "status", "Device bridge currently disabled");
+            let _ = link_enabled.wait_for(|enabled| *enabled).await;
             continue;
         }
 
         link.0.store(LINK_CONNECTING, Ordering::SeqCst);
-        let device_id =
-            match register_device(&api_url, &session.vox_token, &device_identifier, true).await {
-                Ok(id) => id,
-                Err(err) => {
-                    eprintln!("Vox device registration failed: {err}");
-                    link.0.store(LINK_DISCONNECTED, Ordering::SeqCst);
-                    tokio::time::sleep(RETRY_DELAY).await;
-                    continue;
-                }
-            };
+        let device_id = match register_device(
+            &api_url,
+            &session.vox_token,
+            &device_identifier,
+            remote_enabled,
+            local_ready,
+        )
+        .await
+        {
+            Ok(id) => id,
+            Err(err) => {
+                eprintln!("Vox device registration failed: {err}");
+                link.0.store(LINK_DISCONNECTED, Ordering::SeqCst);
+                tokio::time::sleep(RETRY_DELAY).await;
+                continue;
+            }
+        };
 
         if let Err(err) = connect_and_serve(
             &app,
@@ -417,14 +503,14 @@ pub async fn run_supervisor(app: AppHandle) {
             &device_id,
             &terminal,
             link.inner(),
-            &mut consent,
+            &mut link_enabled,
         )
         .await
         {
             eprintln!("Vox device socket disconnected: {err}");
         }
         link.0.store(LINK_DISCONNECTED, Ordering::SeqCst);
-        let still_enabled = *consent.borrow();
+        let still_enabled = *link_enabled.borrow();
         if still_enabled {
             tokio::time::sleep(RETRY_DELAY).await;
         }
