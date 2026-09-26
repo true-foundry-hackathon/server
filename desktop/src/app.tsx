@@ -14,6 +14,7 @@ import {
   api,
   invokeErrorMessage,
   type AuthState,
+  type Collection,
   type DesktopTask,
 } from "@/lib/tauri";
 
@@ -23,7 +24,7 @@ const emptyNewTask: NewTaskForm = {
   title: "",
   instruction: "",
   execType: "autonomous",
-  project: "Vox Core",
+  collectionId: "",
   due: "Today",
 };
 
@@ -55,6 +56,20 @@ export default function App() {
   const [showNewTask, setShowNewTask] = useState(false);
   const [inspectTask, setInspectTask] = useState<DesktopTask | null>(null);
   const [newTask, setNewTask] = useState<NewTaskForm>(emptyNewTask);
+  const [collections, setCollections] = useState<Collection[]>([]);
+
+  const loadCollections = useCallback(async () => {
+    try {
+      const res = await api.getCollections();
+      setCollections(res);
+    } catch {
+      /* keep previous list */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (auth.signed_in) void loadCollections();
+  }, [auth.signed_in, loadCollections]);
 
   const pendingCount = tasks.filter(
     (t) => t.status === "pending" || t.status === "executing",
@@ -247,7 +262,7 @@ export default function App() {
       title,
       instruction: newTask.instruction.trim() || undefined,
       execution_type: newTask.execType,
-      project_name: newTask.project,
+      collection_id: newTask.collectionId || undefined,
       due_at: newTask.due,
     });
     setNewTask(emptyNewTask);
@@ -386,6 +401,7 @@ export default function App() {
       <NewTaskDialog
         open={showNewTask}
         form={newTask}
+        collections={collections}
         onOpenChange={setShowNewTask}
         onChange={(patch) => setNewTask((prev) => ({ ...prev, ...patch }))}
         onSubmit={() => void createTask()}

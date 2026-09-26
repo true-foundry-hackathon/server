@@ -16,24 +16,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import type { Collection } from "@/lib/tauri";
 
 export type NewTaskForm = {
   title: string;
   instruction: string;
   execType: string;
-  project: string;
+  collectionId: string;
   due: string;
 };
 
 export function NewTaskDialog({
   open,
   form,
+  collections,
   onOpenChange,
   onChange,
   onSubmit,
 }: {
   open: boolean;
   form: NewTaskForm;
+  collections: Collection[];
   onOpenChange: (open: boolean) => void;
   onChange: (patch: Partial<NewTaskForm>) => void;
   onSubmit: () => void;
@@ -81,10 +84,22 @@ export function NewTaskDialog({
             </div>
             <div className="grid gap-1.5">
               <Label>Project / Collection</Label>
-              <Input
-                value={form.project}
-                onChange={(e) => onChange({ project: e.target.value })}
-              />
+              <Select
+                value={form.collectionId || "none"}
+                onValueChange={(v) => onChange({ collectionId: v === "none" ? "" : v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No project</SelectItem>
+                  {collections.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="grid gap-1.5">
