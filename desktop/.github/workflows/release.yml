@@ -31,6 +31,31 @@ jobs:
       - name: Install Dioxus CLI
         run: cargo install dioxus-cli --locked
 
+      - name: Configure Apple signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "${APPLE_CERTIFICATE:-}" ]; then
+            {
+              echo "APPLE_CERTIFICATE<<EOF"
+              echo "$APPLE_CERTIFICATE"
+              echo "EOF"
+              echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD"
+              echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY"
+              echo "APPLE_ID=$APPLE_ID"
+              echo "APPLE_PASSWORD=$APPLE_PASSWORD"
+              echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"
+            } >> "$GITHUB_ENV"
+            echo "Apple signing enabled"
+          else
+            echo "Apple signing skipped (no APPLE_CERTIFICATE secret)"
+          fi
+
       - name: Build and publish
         uses: tauri-apps/tauri-action@v0
         env:
@@ -42,12 +67,6 @@ jobs:
           VOX_OAUTH_REDIRECT_URI: ${{ vars.VOX_OAUTH_REDIRECT_URI }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           projectPath: src-tauri
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag_name || format('desktop-{0}', github.sha) }}
@@ -57,6 +76,9 @@ jobs:
 
             Google sign-in redirect (add in Supabase Auth URL config):
             `vox://auth/callback`
+
+            Unsigned builds: right-click → Open the first time (Gatekeeper).
+            Add `APPLE_CERTIFICATE` (+ password / identity / notarization secrets) later for signed releases.
           releaseDraft: true
           prerelease: false
           args: --target aarch64-apple-darwin
