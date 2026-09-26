@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { HomeShell } from "@/components/home-shell";
 import { InspectTaskDialog } from "@/components/inspect-task-dialog";
 import { NewTaskDialog, type NewTaskForm } from "@/components/new-task-dialog";
+import { PhoneEntryScreen } from "@/components/phone-entry-screen";
 import type { ShellTab } from "@/components/shell/shell-tabs";
 import { SignInScreen } from "@/components/sign-in-screen";
 import { useAuth } from "@/hooks/use-auth";
@@ -31,7 +32,14 @@ export default function App() {
   const [inspectTask, setInspectTask] = useState<DesktopTask | null>(null);
   const [newTask, setNewTask] = useState<NewTaskForm>(emptyNewTask);
 
-  const { auth: authState, authBusy, authError, googleSignIn, signOut } = auth;
+  const {
+    auth: authState,
+    authBusy,
+    authError,
+    googleSignIn,
+    signOut,
+    linkPhone,
+  } = auth;
   const {
     callState,
     isActive,
@@ -126,6 +134,16 @@ export default function App() {
         busy={authBusy}
         error={authError}
         onSignIn={() => void handleGoogleSignIn()}
+      />
+    );
+  }
+
+  if (!authState.has_phone) {
+    return (
+      <PhoneEntryScreen
+        busy={authBusy}
+        error={authError}
+        onSubmit={(phoneNumber) => void linkPhone(phoneNumber)}
       />
     );
   }

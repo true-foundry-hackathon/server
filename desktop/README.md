@@ -115,4 +115,4 @@ Public config is injected at **build time** via `src-tauri/build.rs`. End users 
 
 - Deploy Bridge + Core with desktop channel + Caddy `/v1/*` → Core.
 - Core: `SUPABASE_URL` points at the same Supabase project (JWKS ES256 verify). Optional `SUPABASE_JWT_SECRET` only for legacy HS256 tokens.
-- Optional private-beta fallback on Bridge: `DESKTOP_AUTH_TOKEN` (not used by this app).
+- Remote control of the Mac is off by default. The user turns it on from the Desktop Link tile; every command still needs a spoken confirmation and is logged to `~/.config/vox/remote-commands.log`.

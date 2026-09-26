@@ -11,8 +11,6 @@ use crate::session_store::StoredSession;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateDesktopSessionRequest {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub host_user_id: Option<String>,
     #[serde(default)]
     pub external_conversation_id: Option<String>,
     #[serde(default)]
@@ -71,7 +69,6 @@ pub async fn run_session_loop(
         .post(&session_url)
         .header("authorization", format!("Bearer {}", session.vox_token))
         .json(&CreateDesktopSessionRequest {
-            host_user_id: Some(format!("vox-account:{}", session.user_id)),
             external_conversation_id: None,
             opening_instruction: None,
         })

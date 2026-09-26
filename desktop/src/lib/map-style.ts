@@ -95,7 +95,7 @@ export function ensure3dBuildings(map: maplibregl.Map) {
       type: "fill-extrusion",
       minzoom: 14,
       paint: {
-        "fill-extrusion-color": "#4a4b4e",
+        "fill-extrusion-color": "#0f0f11",
         "fill-extrusion-height": [
           "interpolate",
           ["linear"],

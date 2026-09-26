@@ -14,6 +14,15 @@ pub fn filter_vox_urls(urls: impl IntoIterator<Item = url::Url>) -> Vec<url::Url
 }
 
 pub fn handle_oauth_callback_urls(app: &AppHandle, urls: &[url::Url]) {
+    // The OS hands us the URL without bringing the app forward, so the user
+    // is left staring at the browser until they manually switch — raise and
+    // focus the window ourselves, the same way clicking the Dock icon would.
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+
     // Each callback must outlive this loop iteration inside the spawned
     // `async move` task, so the clone is required despite the lint.
     #[allow(clippy::unnecessary_to_owned)]
