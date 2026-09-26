@@ -4,6 +4,10 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Vox needs microphone access for live voice conversations.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Vox uses your location to center the home map and highlight the building you are in.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>Vox uses your location to center the home map and highlight the building you are in.</string>
 	<key>CFBundleDisplayName</key>
 	<string>Vox</string>
 	<key>CFBundleName</key>

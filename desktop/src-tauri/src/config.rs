@@ -50,7 +50,7 @@ impl PublicConfig {
         let oauth_redirect_uri = first_nonempty(&[
             &env::var("VOX_OAUTH_REDIRECT_URI").unwrap_or_default(),
             option_env!("VOX_OAUTH_REDIRECT_URI").unwrap_or(""),
-            "vox://auth/callback",
+            "https://api.voxagent.in/auth/bridge",
         ])
         .unwrap();
 

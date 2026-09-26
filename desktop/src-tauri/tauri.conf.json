@@ -4,13 +4,14 @@
   "version": "0.1.0",
   "identifier": "com.voxagent.desktop",
   "build": {
-    "beforeDevCommand": "dx serve --port 1420 --interactive false",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "dx bundle --release",
-    "frontendDist": "../dist/public"
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
   },
   "app": {
     "withGlobalTauri": true,
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
@@ -20,7 +21,8 @@
         "resizable": true,
         "center": true,
         "decorations": false,
-        "transparent": false,
+        "transparent": true,
+        "shadow": true,
         "acceptFirstMouse": true,
         "theme": "Dark"
       }

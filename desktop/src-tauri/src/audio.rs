@@ -1,7 +1,7 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, StreamConfig};
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{mpsc, oneshot};
 
@@ -20,6 +20,7 @@ impl AudioEngine {
     pub fn start(
         mic_tx: mpsc::UnboundedSender<Vec<u8>>,
         mark_tx: mpsc::UnboundedSender<String>,
+        mic_level: Arc<AtomicU32>,
     ) -> Result<Self, String> {
         let output_queue = Arc::new(Mutex::new(VecDeque::<f32>::new()));
         let pending_marks = Arc::new(Mutex::new(VecDeque::<(usize, String)>::new()));
@@ -82,10 +83,17 @@ impl AudioEngine {
                 buffer_size: cpal::BufferSize::Default,
             };
 
+            let mic_level_f32 = Arc::clone(&mic_level);
+            let mic_level_i16 = Arc::clone(&mic_level);
+
             let input_stream = match in_default_config.sample_format() {
                 SampleFormat::F32 => input_device.build_input_stream(
                     &in_config,
                     move |data: &[f32], _| {
+                        let sum_sq: f32 = data.iter().map(|&s| s * s).sum();
+                        let rms = (sum_sq / data.len().max(1) as f32).sqrt();
+                        mic_level_f32.store(rms.to_bits(), Ordering::Relaxed);
+
                         let mulaw = resample_input_to_8k_mulaw(data, in_rate, in_channels);
                         if !mulaw.is_empty() {
                             let _ = mic_tx.send(mulaw);
@@ -99,6 +107,10 @@ impl AudioEngine {
                     move |data: &[i16], _| {
                         let f32_samples: Vec<f32> =
                             data.iter().map(|&s| s as f32 / 32768.0).collect();
+                        let sum_sq: f32 = f32_samples.iter().map(|&s| s * s).sum();
+                        let rms = (sum_sq / f32_samples.len().max(1) as f32).sqrt();
+                        mic_level_i16.store(rms.to_bits(), Ordering::Relaxed);
+
                         let mulaw = resample_input_to_8k_mulaw(&f32_samples, in_rate, in_channels);
                         if !mulaw.is_empty() {
                             let _ = mic_tx.send(mulaw);

@@ -1,6 +1,6 @@
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 use tokio_tungstenite::connect_async;
@@ -61,6 +61,7 @@ pub async fn run_session_loop(
     is_running: Arc<AtomicBool>,
     ready_tx: oneshot::Sender<Result<(), String>>,
     mut stop_rx: oneshot::Receiver<()>,
+    mic_level: Arc<AtomicU32>,
 ) -> Result<(), String> {
     let clean_bridge = bridge_url.trim_end_matches('/');
     let session_url = format!("{clean_bridge}/bridge/desktop/voice/session");
@@ -131,7 +132,7 @@ pub async fn run_session_loop(
     let (mic_tx, mut mic_rx) = mpsc::unbounded_channel::<Vec<u8>>();
     let (mark_tx, mut mark_rx) = mpsc::unbounded_channel::<String>();
 
-    let audio_engine = match AudioEngine::start(mic_tx, mark_tx) {
+    let audio_engine = match AudioEngine::start(mic_tx, mark_tx, mic_level) {
         Ok(engine) => engine,
         Err(e) => {
             let _ = ready_tx.send(Err(e.clone()));

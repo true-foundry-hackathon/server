@@ -1,0 +1,281 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500&family=Inter:wght@400;500;600&display=swap");
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-void-black: #040506;
+  --color-ink: #07080a;
+  --color-obsidian: #111214;
+  --color-graphite: #1b1c1e;
+  --color-smoke: #6a6b6c;
+  --color-ash: #9c9c9d;
+  --color-mist: #e6e6e6;
+  --color-iron: #454647;
+  --color-slate: #2f3031;
+  --color-pure-white: #ffffff;
+  --color-coral-pulse: #ff6363;
+  --color-ember-hush: #452324;
+  --color-electric-sky: #63a1ff;
+  --color-info-blue: #56c2ff;
+  --color-success-green: #59d499;
+  --color-border-subtle: #363739;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-heading: var(--font-sans);
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius: 0.5rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.25rem;
+  --radius-4xl: 1.5rem;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+:root,
+.dark {
+  --background: #040506;
+  --foreground: #ffffff;
+  --card: #07080a;
+  --card-foreground: #ffffff;
+  --popover: #07080a;
+  --popover-foreground: #ffffff;
+  --primary: #e6e6e6;
+  --primary-foreground: #454647;
+  --secondary: #111214;
+  --secondary-foreground: #e6e6e6;
+  --muted: #1b1c1e;
+  --muted-foreground: #9c9c9d;
+  --accent: #111214;
+  --accent-foreground: #ffffff;
+  --destructive: #452324;
+  --border: #363739;
+  --input: rgba(255, 255, 255, 0.05);
+  --ring: rgba(255, 255, 255, 0.28);
+  --radius: 0.5rem;
+
+  --shadow-key:
+    rgba(255, 255, 255, 0.05) 0px 1px 0px 0px inset,
+    rgba(255, 255, 255, 0.25) 0px 0px 0px 1px,
+    rgba(0, 0, 0, 0.2) 0px -1px 0px 0px inset;
+  --shadow-btn-lift:
+    rgba(0, 0, 0, 0.03) 0px 7px 3px 0px,
+    rgba(0, 0, 0, 0.25) 0px 4px 4px 0px;
+  --shadow-popover:
+    rgba(0, 0, 0, 0.4) 0px 4px 40px 8px,
+    rgba(0, 0, 0, 0.8) 0px 0px 0px 0.5px,
+    rgba(255, 255, 255, 0.3) 0px 0.5px 0px 0px inset;
+
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: transparent;
+  }
+
+  body {
+    @apply text-foreground font-sans antialiased;
+    font-feature-settings: "calt", "kern", "liga", "ss03";
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Rounded window chrome — requires transparent Tauri window */
+  #root {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--background);
+    border-radius: 12px;
+  }
+}
+
+[data-tauri-drag-region] {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+button,
+input,
+textarea,
+select,
+a,
+.no-drag {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.shadow-key {
+  box-shadow: var(--shadow-key);
+}
+
+.shadow-btn-lift {
+  box-shadow: var(--shadow-btn-lift);
+}
+
+/* Sign-in ambient: coral wash top-left + film grain, fades toward center */
+.sign-in-glow {
+  background: radial-gradient(
+    ellipse 95% 85% at 28% 28%,
+    rgba(255, 99, 99, 0.32) 0%,
+    rgba(255, 99, 99, 0.14) 32%,
+    rgba(255, 99, 99, 0.05) 55%,
+    transparent 76%
+  );
+  filter: blur(42px);
+}
+
+.sign-in-noise {
+  opacity: 0.4;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+  -webkit-mask-image: radial-gradient(
+    110% 95% at 0% 0%,
+    #000 0%,
+    #000 30%,
+    rgba(0, 0, 0, 0.3) 52%,
+    transparent 74%
+  );
+  mask-image: radial-gradient(
+    110% 95% at 0% 0%,
+    #000 0%,
+    #000 30%,
+    rgba(0, 0, 0, 0.3) 52%,
+    transparent 74%
+  );
+}
+
+/* Mission-control map chrome */
+.vox-map-host,
+.vox-map-host .maplibregl-map,
+.vox-map-host .maplibregl-canvas-container,
+.vox-map-host .maplibregl-canvas {
+  width: 100% !important;
+  height: 100% !important;
+  background: #0b0c0e !important;
+}
+
+.vox-map-host .maplibregl-canvas {
+  opacity: 1 !important;
+}
+
+/* Full-bleed film grain over the map (sign-in uses a corner-masked grain) */
+.vox-map-noise {
+  opacity: 0.22;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 140px 140px;
+}
+
+/* Cinematic edge darkening so the 3D map reads like mission-control footage
+   instead of a flat map view. */
+.vox-map-vignette {
+  background: radial-gradient(
+    ellipse 78% 70% at 50% 46%,
+    transparent 45%,
+    rgba(4, 5, 6, 0.35) 78%,
+    rgba(4, 5, 6, 0.72) 100%
+  );
+}
+
+.maplibregl-ctrl-group {
+  background: rgba(0, 0, 0, 0.82) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  box-shadow: none !important;
+  border-radius: 4px !important;
+}
+
+.maplibregl-ctrl-group button {
+  background-color: transparent !important;
+  width: 28px !important;
+  height: 28px !important;
+}
+
+.maplibregl-ctrl-attrib {
+  background: rgba(0, 0, 0, 0.55) !important;
+  color: rgba(255, 255, 255, 0.45) !important;
+  font-size: 10px !important;
+}
+
+.maplibregl-ctrl-bottom-left {
+  left: 14.5rem !important;
+  bottom: 0.5rem !important;
+}
+
+.maplibregl-ctrl-top-right {
+  top: 3rem !important;
+  right: 0.75rem !important;
+}
+
+.vox-hud-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+.vox-hud-marker__pin {
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border: 1px solid #050607;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.vox-hud-marker__stem {
+  width: 1px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.vox-hud-marker__label {
+  max-width: 160px;
+  padding: 3px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: #000;
+  color: #fff;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
