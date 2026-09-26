@@ -198,10 +198,12 @@ a,
   opacity: 1 !important;
 }
 
-/* Full-bleed film grain over the map (sign-in uses a corner-masked grain) */
+/* Full-bleed film grain over the map (sign-in uses a corner-masked grain).
+   soft-light barely shows on the map's near-black base, so this blends with
+   screen instead — that's what makes the speckle visible on dark pixels. */
 .vox-map-noise {
-  opacity: 0.22;
-  mix-blend-mode: soft-light;
+  opacity: 0.09;
+  mix-blend-mode: screen;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 140px 140px;
 }
@@ -220,8 +222,8 @@ a,
 /* Tilt-shift style lens blur: the mask keeps the center crisp and only
    blurs the corners/edges, so the map reads like a miniature/HUD shot. */
 .vox-map-corner-blur {
-  backdrop-filter: blur(7px);
-  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   -webkit-mask-image: radial-gradient(
     ellipse 72% 66% at 50% 46%,
     transparent 48%,

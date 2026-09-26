@@ -5,17 +5,47 @@
 use crate::auth::AuthManager;
 use crate::terminal::TerminalManager;
 use futures_util::{SinkExt, StreamExt};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Duration;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, State};
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
 use tokio_tungstenite::tungstenite::Message;
 
 const RETRY_DELAY: Duration = Duration::from_secs(5);
+
+const LINK_DISCONNECTED: u8 = 0;
+const LINK_CONNECTING: u8 = 1;
+const LINK_CONNECTED: u8 = 2;
+
+/// Live status of the desktop's socket to Vox Core — whether the Vox agent
+/// running on the server currently has a channel to control this machine.
+#[derive(Default)]
+pub struct DeviceLinkState(AtomicU8);
+
+#[derive(Debug, Serialize)]
+pub struct DeviceLinkStatus {
+    status: &'static str,
+}
+
+fn link_status_str(phase: u8) -> &'static str {
+    match phase {
+        LINK_CONNECTING => "connecting",
+        LINK_CONNECTED => "connected",
+        _ => "disconnected",
+    }
+}
+
+#[tauri::command]
+pub fn get_device_link_status(state: State<'_, DeviceLinkState>) -> DeviceLinkStatus {
+    DeviceLinkStatus {
+        status: link_status_str(state.0.load(Ordering::SeqCst)),
+    }
+}
 
 #[derive(Debug, Deserialize)]
 struct RegisterDeviceResponse {
@@ -139,6 +169,7 @@ async fn connect_and_serve(
     vox_token: &str,
     device_id: &str,
     terminal: &TerminalManager,
+    link: &DeviceLinkState,
 ) -> Result<(), String> {
     let url = socket_url(api_url, device_id);
     let mut request = url
@@ -151,6 +182,7 @@ async fn connect_and_serve(
     let (ws_stream, _) = connect_async(request)
         .await
         .map_err(|e| format!("device socket connect failed: {e}"))?;
+    link.0.store(LINK_CONNECTED, Ordering::SeqCst);
     let (mut sender, mut receiver) = ws_stream.split();
 
     while let Some(message) = receiver.next().await {
@@ -185,15 +217,18 @@ pub async fn run_supervisor(app: AppHandle) {
     let mut registered_id: Option<String> = None;
 
     loop {
+        let link = app.state::<DeviceLinkState>();
         let session = {
             let auth = app.state::<AuthManager>();
             auth.current_session()
         };
         let Some(session) = session else {
+            link.0.store(LINK_DISCONNECTED, Ordering::SeqCst);
             tokio::time::sleep(RETRY_DELAY).await;
             continue;
         };
         let api_url = app.state::<AuthManager>().config().api_url.clone();
+        link.0.store(LINK_CONNECTING, Ordering::SeqCst);
 
         let device_id = match &registered_id {
             Some(id) => id.clone(),
@@ -204,17 +239,25 @@ pub async fn run_supervisor(app: AppHandle) {
                 }
                 Err(err) => {
                     eprintln!("Vox device registration failed: {err}");
+                    link.0.store(LINK_DISCONNECTED, Ordering::SeqCst);
                     tokio::time::sleep(RETRY_DELAY).await;
                     continue;
                 }
             },
         };
 
-        if let Err(err) =
-            connect_and_serve(&api_url, &session.vox_token, &device_id, &terminal).await
+        if let Err(err) = connect_and_serve(
+            &api_url,
+            &session.vox_token,
+            &device_id,
+            &terminal,
+            link.inner(),
+        )
+        .await
         {
             eprintln!("Vox device socket disconnected: {err}");
         }
+        link.0.store(LINK_DISCONNECTED, Ordering::SeqCst);
         tokio::time::sleep(RETRY_DELAY).await;
     }
 }

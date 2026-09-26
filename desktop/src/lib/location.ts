@@ -5,6 +5,7 @@ export type DeviceLocation = {
   lng: number;
   source: "gps" | "ip" | "default";
   label: string;
+  city?: string;
   permissionDenied: boolean;
 };
 
@@ -54,6 +55,28 @@ async function ipApprox(): Promise<{
   };
 }
 
+// GPS gives coordinates only — reverse-geocode via Nominatim (no key needed)
+// so the widget can show a city name instead of raw numbers.
+async function reverseGeocodeCity(
+  lat: number,
+  lng: number,
+): Promise<string | undefined> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10`,
+      { signal: AbortSignal.timeout(6_000), headers: { Accept: "application/json" } },
+    );
+    if (!res.ok) return undefined;
+    const data = (await res.json()) as {
+      address?: Record<string, string>;
+    };
+    const a = data.address ?? {};
+    return a.city ?? a.town ?? a.village ?? a.suburb ?? a.county;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Prefer GPS; fall back to IP approx so the map still centers near the user. */
 export async function resolveDeviceLocation(): Promise<DeviceLocation> {
   let permissionDenied: boolean;
@@ -65,6 +88,7 @@ export async function resolveDeviceLocation(): Promise<DeviceLocation> {
       lng: gps.lng,
       source: "gps",
       label: "You are here",
+      city: await reverseGeocodeCity(gps.lat, gps.lng),
       permissionDenied: false,
     };
   } catch (err) {
@@ -82,6 +106,7 @@ export async function resolveDeviceLocation(): Promise<DeviceLocation> {
       lng: ip.lng,
       source: "ip",
       label: ip.city ? `Approx · ${ip.city}` : "Approx from network",
+      city: ip.city,
       permissionDenied,
     };
   } catch {

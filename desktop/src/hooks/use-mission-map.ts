@@ -15,7 +15,7 @@ const STYLE_URL = "https://tiles.openfreemap.org/styles/dark";
 const ORBIT_DEG_PER_SEC = 4; // ~90s per revolution
 const VIEW_PAD_DEG = 0.01; // ~1.1km box — keeps pan near home
 const POS_CACHE_KEY = "vox-map-pos";
-const MAP_ZOOM = 17.5;
+const MAP_ZOOM = 16;
 const MAP_PITCH = 62;
 
 function setHomeBounds(map: maplibregl.Map, lng: number, lat: number) {
@@ -27,11 +27,19 @@ function setHomeBounds(map: maplibregl.Map, lng: number, lat: number) {
   map.setMaxZoom(18);
 }
 
+export type ResolvedLocation = {
+  lat: number;
+  lng: number;
+  label: string;
+  city?: string;
+};
+
 export function useMissionMap(): {
   mapNode: RefObject<HTMLDivElement | null>;
   mapReady: boolean;
   mapError: string;
   locationSource: "gps" | "ip" | "default" | null;
+  location: ResolvedLocation | null;
   permissionDenied: boolean;
   relocate: () => void;
 } {
@@ -42,6 +50,7 @@ export function useMissionMap(): {
   const [locationSource, setLocationSource] = useState<
     "gps" | "ip" | "default" | null
   >(null);
+  const [location, setLocation] = useState<ResolvedLocation | null>(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState("");
@@ -214,6 +223,12 @@ export function useMissionMap(): {
         const loc = await resolveDeviceLocation();
         setLocationSource(loc.source);
         setPermissionDenied(loc.permissionDenied);
+        setLocation({
+          lat: loc.lat,
+          lng: loc.lng,
+          label: loc.label,
+          city: loc.city,
+        });
         applyPosition(loc.lng, loc.lat);
       };
 
@@ -263,6 +278,7 @@ export function useMissionMap(): {
     mapReady,
     mapError,
     locationSource,
+    location,
     permissionDenied,
     relocate,
   };

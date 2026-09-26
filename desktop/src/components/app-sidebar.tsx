@@ -9,11 +9,12 @@ import {
   ListTodo,
   PanelLeftClose,
   PanelLeftOpen,
+  UserRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { CoralDiamond } from "@/components/icons";
+import { VoxOrbSvg } from "@/components/vox-logo";
 import { windowControls } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
@@ -70,7 +71,7 @@ export function AppSidebar({
   onSignOut: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const initials = accountLabel.replace(/@.*/, "").slice(0, 2).toUpperCase();
+  const displayName = accountLabel.replace(/@.*/, "");
 
   return (
     <aside
@@ -128,7 +129,7 @@ export function AppSidebar({
           onClick={() => onViewChange("dashboard")}
           className="mb-3 flex h-10 shrink-0 items-center gap-2.5 rounded-md px-2.5 transition hover:bg-obsidian"
         >
-          <CoralDiamond />
+          <VoxOrbSvg size={16} className="shrink-0 text-coral-pulse" />
           {expanded ? (
             <span className="truncate text-[13px] font-medium text-pure-white">
               Vox
@@ -187,13 +188,13 @@ export function AppSidebar({
               showProfile && "bg-obsidian",
             )}
           >
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-graphite font-mono text-[10.5px] font-medium text-pure-white">
-              {initials}
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-graphite text-pure-white">
+              <UserRound className="size-4" strokeWidth={1.75} />
             </span>
             {expanded ? (
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[12px] text-pure-white">
-                  {accountLabel}
+                <span className="block truncate text-[12px] capitalize text-pure-white">
+                  {displayName}
                 </span>
                 <span className="block truncate text-[10px] text-smoke">
                   Vox Desktop v{__APP_VERSION__}
@@ -208,8 +209,8 @@ export function AppSidebar({
                 <p className="font-mono text-[10.5px] uppercase tracking-wide text-smoke">
                   Signed In
                 </p>
-                <p className="truncate font-mono text-[12.5px] text-pure-white">
-                  {accountLabel}
+                <p className="truncate font-mono text-[12.5px] capitalize text-pure-white">
+                  {displayName}
                 </p>
               </div>
               <Separator />

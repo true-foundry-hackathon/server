@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { MapPin, Satellite } from "lucide-react";
 import type { SidebarSectionId } from "@/components/app-sidebar";
 import { MapAmbientChrome } from "@/components/map-ambient-chrome";
-import { TalkToVoxIsland } from "@/components/talk-to-vox-island";
+import { TalkToVoxWidget } from "@/components/talk-to-vox-widget";
 import { Button } from "@/components/ui/button";
+import { useDeviceLink } from "@/hooks/use-device-link";
 import { useMissionMap } from "@/hooks/use-mission-map";
 import { openLocationSettings } from "@/lib/tauri";
+import { cn } from "@/lib/utils";
 
 export function DashboardView({
   isActive,
@@ -30,10 +33,12 @@ export function DashboardView({
     mapReady,
     mapError,
     locationSource,
+    location,
     permissionDenied,
     relocate,
   } = useMissionMap();
   const [locPromptDismissed, setLocPromptDismissed] = useState(false);
+  const deviceLinkStatus = useDeviceLink();
 
   const placeholder =
     activeSection === "lms"
@@ -53,6 +58,53 @@ export function DashboardView({
       />
 
       <MapAmbientChrome />
+
+      <div className="no-drag pointer-events-none absolute right-4 top-4 z-20 flex items-stretch gap-2">
+        <TalkToVoxWidget
+          isActive={isActive}
+          isSpeaking={isSpeaking}
+          callState={callState}
+          label={label}
+          subLabel={subLabel}
+          callError={callError}
+          onToggleCall={onToggleCall}
+        />
+        <div className="flex flex-col gap-2">
+          <HudWidget
+            icon={<MapPin className="size-3.5" />}
+            label="Location"
+            value={location ? "You are at" : locationSource ? "Locating…" : "Unknown"}
+            detail={
+              location ? (location.city ?? "Unknown area") : undefined
+            }
+            dotClassName={
+              locationSource === "gps"
+                ? "bg-emerald-400"
+                : locationSource
+                  ? "bg-amber-400"
+                  : "bg-white/30"
+            }
+          />
+          <HudWidget
+            icon={<Satellite className="size-3.5" />}
+            label="Desktop Link"
+            value={
+              deviceLinkStatus === "connected"
+                ? "Agent can control this Mac"
+                : deviceLinkStatus === "connecting"
+                  ? "Reconnecting…"
+                  : "Not connected"
+            }
+            dotClassName={
+              deviceLinkStatus === "connected"
+                ? "bg-emerald-400"
+                : deviceLinkStatus === "connecting"
+                  ? "bg-amber-400 animate-pulse"
+                  : "bg-white/30"
+            }
+          />
+        </div>
+      </div>
 
       {!mapReady && !mapError ? (
         <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center">
@@ -109,16 +161,38 @@ export function DashboardView({
           {placeholder}
         </div>
       ) : null}
+    </div>
+  );
+}
 
-      <TalkToVoxIsland
-        isActive={isActive}
-        isSpeaking={isSpeaking}
-        callState={callState}
-        label={label}
-        subLabel={subLabel}
-        callError={callError}
-        onToggleCall={onToggleCall}
-      />
+function HudWidget({
+  icon,
+  label,
+  value,
+  detail,
+  dotClassName,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  detail?: string;
+  dotClassName: string;
+}) {
+  return (
+    <div className="min-w-[13rem] rounded-lg border border-white/10 bg-black/70 px-3 py-2 shadow-[0_12px_28px_rgba(0,0,0,0.5)] backdrop-blur-md">
+      <div className="flex items-center gap-1.5 text-white/45">
+        {icon}
+        <span className="font-mono text-[9.5px] uppercase tracking-[0.14em]">
+          {label}
+        </span>
+        <span
+          className={cn("ml-auto size-1.5 shrink-0 rounded-full", dotClassName)}
+        />
+      </div>
+      <p className="mt-1 truncate text-[12.5px] text-white/90">{value}</p>
+      {detail ? (
+        <p className="mt-0.5 font-mono text-[10px] text-white/40">{detail}</p>
+      ) : null}
     </div>
   );
 }

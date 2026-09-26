@@ -17,6 +17,10 @@ export type CallStatus = {
   is_speaking: boolean;
 };
 
+export type DeviceLinkStatus = {
+  status: "connected" | "connecting" | "disconnected";
+};
+
 export type DesktopTask = {
   id: string;
   title: string;
@@ -98,6 +102,8 @@ export const api = {
   createCollection: (payload: CreateCollectionPayload) =>
     invoke<Collection>("create_collection", payload),
   archiveCollection: (id: string) => invoke<void>("archive_collection", { id }),
+  deviceLinkStatus: () =>
+    invoke<DeviceLinkStatus>("get_device_link_status"),
 };
 
 export const windowControls = {

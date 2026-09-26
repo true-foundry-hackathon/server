@@ -73,6 +73,7 @@ pub fn run() {
         .manage(auth)
         .manage(SessionManager::new())
         .manage(task_store::TaskManager::new())
+        .manage(device_link::DeviceLinkState::default())
         .setup(|app| {
             #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
             {
@@ -111,6 +112,7 @@ pub fn run() {
             sync_client::get_collections,
             sync_client::create_collection,
             sync_client::archive_collection,
+            device_link::get_device_link_status,
             #[cfg(target_os = "macos")]
             macos_location::get_native_location
         ])
