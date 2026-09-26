@@ -343,6 +343,7 @@ export function DashboardView({
   pendingCount,
   onToggleCall,
   onOpenTasks,
+  onOpenProjects,
   onOpenSettings,
 }: {
   orbState: VoxOrbVisualState;
@@ -356,6 +357,7 @@ export function DashboardView({
   pendingCount: number;
   onToggleCall: () => void;
   onOpenTasks: () => void;
+  onOpenProjects: () => void;
   onOpenSettings: () => void;
 }) {
   const mapNode = useRef<HTMLDivElement>(null);
@@ -595,6 +597,11 @@ export function DashboardView({
     if (id === "tasks") {
       setRailActive(null);
       onOpenTasks();
+      return;
+    }
+    if (id === "projects") {
+      setRailActive(null);
+      onOpenProjects();
       return;
     }
     if (id === "settings") {

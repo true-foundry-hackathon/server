@@ -5,7 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import { CoralDiamond } from "@/components/icons";
 import { SidebarBtn } from "@/components/sidebar-btn";
 
-export type DesktopView = "dashboard" | "tasks";
+export type DesktopView = "dashboard" | "tasks" | "projects";
 
 export function AppSidebar({
   view,
