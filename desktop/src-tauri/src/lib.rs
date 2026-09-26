@@ -14,7 +14,6 @@ mod session;
 mod session_store;
 mod sync_client;
 mod system_stats;
-mod task_store;
 mod terminal;
 mod types;
 
@@ -76,7 +75,6 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .manage(auth)
         .manage(SessionManager::new())
-        .manage(task_store::TaskManager::new())
         .manage(device_link::DeviceLinkState::default())
         .manage(device_link::RemoteControl::load())
         .manage(device_link::LocalModelReady::load())
@@ -123,13 +121,15 @@ pub fn run() {
             session::end_call,
             session::call_status,
             set_window_size,
-            sync_client::get_tasks,
-            sync_client::create_task,
-            sync_client::update_task,
+            sync_client::get_spans,
+            sync_client::create_span,
+            sync_client::update_span,
+            sync_client::delete_span,
             sync_client::get_collections,
-            sync_client::get_timeline,
             sync_client::create_collection,
+            sync_client::update_collection,
             sync_client::archive_collection,
+            sync_client::set_span_collection,
             device_link::get_device_link_status,
             device_link::get_remote_control,
             device_link::set_remote_control,

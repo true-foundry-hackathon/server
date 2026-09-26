@@ -43,12 +43,7 @@ export function AgentPane({
             : "border-white/15 bg-[#0a0b0e]/85 text-pure-white hover:border-white/30 hover:bg-[#121318]/95 shadow-[0_8px_30px_rgba(0,0,0,0.6)]",
         )}
       >
-        <VoxLogo
-          animated
-          size={20}
-          state={orbState}
-          className="shrink-0"
-        />
+        <VoxLogo animated size={20} state={orbState} className="shrink-0" />
         <span className="text-[13px] font-medium tracking-wide">
           {buttonText}
         </span>

@@ -3,28 +3,31 @@ import {
   BarChart3,
   BookOpen,
   Bot,
+  CalendarDays,
   ChevronDown,
-  FolderKanban,
-  ListTodo,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { windowControls, type DesktopTask } from "@/lib/tauri";
+import { windowControls } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import type { ShellTab } from "./shell-tabs";
 
 const CONTROLS = [
   { title: "Close", color: "#ff5f57", action: windowControls.close },
   { title: "Minimize", color: "#febc2e", action: windowControls.minimize },
-  { title: "Fullscreen", color: "#28c840", action: windowControls.toggleMaximize },
+  {
+    title: "Fullscreen",
+    color: "#28c840",
+    action: windowControls.toggleMaximize,
+  },
 ] as const;
 
 export function AppSidebar({
   activeTab,
   onTabChange,
-  pendingCount = 0,
   accountLabel = "Signed in",
   userName,
   avatarUrl,
@@ -34,19 +37,17 @@ export function AppSidebar({
   onToggleCollapsed?: () => void;
   activeTab: ShellTab;
   onTabChange: (tab: ShellTab) => void;
-  pendingCount?: number;
-  tasks?: DesktopTask[];
   accountLabel?: string;
   userName?: string | null;
   avatarUrl?: string | null;
   onSignOut: () => void;
-  onNewTask?: () => void;
-  onInspectTask?: (task: DesktopTask) => void;
 }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [imgError, setImgError] = useState(false);
 
-  const displayName = (userName || accountLabel || "User").replace(/@.*/, "").trim();
+  const displayName = (userName || accountLabel || "User")
+    .replace(/@.*/, "")
+    .trim();
   const initial = displayName
     ? displayName
         .split(/\s+/)
@@ -60,14 +61,20 @@ export function AppSidebar({
   const handleDragMouseDown = (e: React.MouseEvent) => {
     if (
       e.button === 0 &&
-      !(e.target as HTMLElement).closest("button, a, input, select, textarea, [data-no-drag]")
+      !(e.target as HTMLElement).closest(
+        "button, a, input, select, textarea, [data-no-drag]",
+      )
     ) {
       void getCurrentWindow().startDragging();
     }
   };
 
   const handleDoubleClick = (e: React.MouseEvent) => {
-    if (!(e.target as HTMLElement).closest("button, a, input, select, textarea, [data-no-drag]")) {
+    if (
+      !(e.target as HTMLElement).closest(
+        "button, a, input, select, textarea, [data-no-drag]",
+      )
+    ) {
       void getCurrentWindow().toggleMaximize();
     }
   };
@@ -127,36 +134,29 @@ export function AppSidebar({
           </button>
           <button
             type="button"
-            onClick={() => onTabChange("tasks")}
+            onClick={() => onTabChange("timeline")}
             className={cn(
-              "flex h-8 items-center justify-between rounded-md px-2.5 text-[12.5px] transition",
-              activeTab === "tasks"
+              "flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[12.5px] transition",
+              activeTab === "timeline"
                 ? "bg-white/[0.12] font-medium text-pure-white"
                 : "text-white/65 hover:bg-white/[0.06] hover:text-pure-white",
             )}
           >
-            <div className="flex items-center gap-2.5">
-              <ListTodo className="size-4 shrink-0 text-white/60" />
-              <span>Tasks</span>
-            </div>
-            {pendingCount > 0 ? (
-              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-coral-pulse px-1 font-mono text-[9px] font-semibold text-white">
-                {pendingCount}
-              </span>
-            ) : null}
+            <CalendarDays className="size-4 shrink-0 text-white/60" />
+            <span>Timeline</span>
           </button>
           <button
             type="button"
-            onClick={() => onTabChange("projects")}
+            onClick={() => onTabChange("collections")}
             className={cn(
               "flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[12.5px] transition",
-              activeTab === "projects"
+              activeTab === "collections"
                 ? "bg-white/[0.12] font-medium text-pure-white"
                 : "text-white/65 hover:bg-white/[0.06] hover:text-pure-white",
             )}
           >
-            <FolderKanban className="size-4 shrink-0 text-white/60" />
-            <span>Projects</span>
+            <Layers className="size-4 shrink-0 text-white/60" />
+            <span>Collections</span>
           </button>
           <button
             type="button"

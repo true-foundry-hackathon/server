@@ -1,36 +1,19 @@
 import { useEffect, useState } from "react";
 import { HomeShell } from "@/components/home-shell";
-import { InspectTaskDialog } from "@/components/inspect-task-dialog";
-import { NewTaskDialog, type NewTaskForm } from "@/components/new-task-dialog";
 import { PhoneEntryScreen } from "@/components/phone-entry-screen";
 import type { ShellTab } from "@/components/shell/shell-tabs";
 import { SignInScreen } from "@/components/sign-in-screen";
 import { useAuth } from "@/hooks/use-auth";
 import { useCallSession } from "@/hooks/use-call-session";
-import { useProjects } from "@/hooks/use-projects";
-import { PAGE_SIZE, useTasks } from "@/hooks/use-tasks";
+import { useCollections } from "@/hooks/use-collections";
 import { statusLabel } from "@/lib/status";
-import type { DesktopTask } from "@/lib/tauri";
-
-const emptyNewTask: NewTaskForm = {
-  title: "",
-  instruction: "",
-  execType: "autonomous",
-  collectionId: "",
-  due: "Today",
-};
 
 export default function App() {
   const auth = useAuth();
   const callSession = useCallSession(auth.auth.signed_in);
 
   const [activeTab, setActiveTab] = useState<ShellTab>("agent");
-  const tasksHook = useTasks(auth.auth.signed_in, activeTab);
-  const projectsHook = useProjects(auth.auth.signed_in);
-
-  const [showNewTask, setShowNewTask] = useState(false);
-  const [inspectTask, setInspectTask] = useState<DesktopTask | null>(null);
-  const [newTask, setNewTask] = useState<NewTaskForm>(emptyNewTask);
+  const collectionsHook = useCollections(auth.auth.signed_in);
 
   const {
     auth: authState,
@@ -50,30 +33,7 @@ export default function App() {
     toggleCall,
     endCall,
   } = callSession;
-  const {
-    tasks,
-    tasksLoading,
-    page,
-    setPage,
-    totalTasks,
-    totalPages,
-    filter,
-    setFilter,
-    search,
-    setSearch,
-    pendingCount,
-    loadTasks,
-    createTask,
-    toggleTaskStatus,
-  } = tasksHook;
-  const {
-    collections,
-    selectedProjectId,
-    setSelectedProjectId,
-    projectsError,
-    createProject,
-    archiveProject,
-  } = projectsHook;
+  const { collections, selectedId, setSelectedId } = collectionsHook;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -86,10 +46,7 @@ export default function App() {
       ) {
         void toggleCall();
       } else if (e.key === "Escape") {
-        if (showNewTask) setShowNewTask(false);
-        else if (inspectTask) setInspectTask(null);
-        else if (activeTab === "projects" && selectedProjectId)
-          setSelectedProjectId(null);
+        if (activeTab === "collections" && selectedId) setSelectedId(null);
         else if (activeTab !== "agent") setActiveTab("agent");
         else if (isActive || callState === "connecting") void endCall();
       }
@@ -97,27 +54,10 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers use latest state via closure refresh
-  }, [
-    authState.signed_in,
-    activeTab,
-    isActive,
-    isBusy,
-    showNewTask,
-    inspectTask,
-    callState,
-    selectedProjectId,
-  ]);
+  }, [authState.signed_in, activeTab, isActive, isBusy, callState, selectedId]);
 
   async function handleGoogleSignIn() {
-    await googleSignIn(loadTasks);
-  }
-
-  async function handleCreateTask() {
-    const created = await createTask(newTask);
-    if (created) {
-      setNewTask(emptyNewTask);
-      setShowNewTask(false);
-    }
+    await googleSignIn(collectionsHook.reload);
   }
 
   const label = statusLabel(callState, callError);
@@ -167,7 +107,10 @@ export default function App() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         accountLabel={authState.email ?? authState.user_id ?? "Signed in"}
-        userName={authState.user_name ?? (authState.email ? authState.email.replace(/@.*/, "") : "User")}
+        userName={
+          authState.user_name ??
+          (authState.email ? authState.email.replace(/@.*/, "") : "User")
+        }
         avatarUrl={authState.avatar_url ?? null}
         onSignOut={() => void signOut()}
         isActive={isActive}
@@ -176,48 +119,12 @@ export default function App() {
         subLabel={subLabel}
         callError={callError}
         onToggleCall={() => void toggleCall()}
-        pendingCount={pendingCount}
-        tasks={tasks}
-        totalTasks={totalTasks}
-        page={page}
-        totalPages={totalPages}
-        pageSize={PAGE_SIZE}
-        filter={filter}
-        search={search}
-        tasksLoading={tasksLoading}
-        onFilterChange={(v) => {
-          setFilter(v);
-          setPage(1);
-        }}
-        onSearchChange={(v) => {
-          setSearch(v);
-          setPage(1);
-        }}
-        onReloadTasks={() => void loadTasks()}
-        onNewTask={() => setShowNewTask(true)}
-        onPageChange={setPage}
-        onToggleTaskStatus={(task) => void toggleTaskStatus(task)}
-        onInspectTask={setInspectTask}
         collections={collections}
-        projectsError={projectsError}
-        selectedProjectId={selectedProjectId}
-        onSelectProject={setSelectedProjectId}
-        onCreateProject={createProject}
-        onArchiveProject={(id) => void archiveProject(id)}
-      />
-
-      <NewTaskDialog
-        open={showNewTask}
-        form={newTask}
-        collections={collections}
-        onOpenChange={setShowNewTask}
-        onChange={(patch) => setNewTask((prev) => ({ ...prev, ...patch }))}
-        onSubmit={() => void handleCreateTask()}
-      />
-
-      <InspectTaskDialog
-        task={inspectTask}
-        onClose={() => setInspectTask(null)}
+        collectionsError={collectionsHook.error}
+        selectedCollectionId={selectedId}
+        onSelectCollection={setSelectedId}
+        onCreateCollection={collectionsHook.create}
+        onArchiveCollection={(id) => void collectionsHook.archive(id)}
       />
     </main>
   );

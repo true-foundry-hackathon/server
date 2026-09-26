@@ -6,12 +6,10 @@ import { ActivityLogs } from "@/components/activity-logs";
 import { PlaceholderPane } from "@/components/shell/placeholder-pane";
 import { SHELL_TABS, type ShellTab } from "@/components/shell/shell-tabs";
 import { MapAmbientChrome } from "@/components/map-ambient-chrome";
-import type { NewProjectForm } from "@/components/new-project-dialog";
-import { ProjectDetailView } from "@/components/project-detail-view";
-import { ProjectsView } from "@/components/projects-view";
-import { TasksView } from "@/components/tasks-view";
+import { CollectionsView } from "@/components/collections-view";
+import { TimelineView } from "@/components/timeline-view";
 import { useMissionMap } from "@/hooks/use-mission-map";
-import type { Collection, DesktopTask } from "@/lib/tauri";
+import type { Collection, NewCollection } from "@/lib/tauri";
 
 export function HomeShell({
   activeTab,
@@ -26,28 +24,12 @@ export function HomeShell({
   subLabel,
   callError,
   onToggleCall,
-  pendingCount,
-  tasks,
-  totalTasks,
-  page,
-  totalPages,
-  pageSize,
-  filter,
-  search,
-  tasksLoading,
-  onFilterChange,
-  onSearchChange,
-  onReloadTasks,
-  onNewTask,
-  onPageChange,
-  onToggleTaskStatus,
-  onInspectTask,
   collections,
-  projectsError,
-  selectedProjectId,
-  onSelectProject,
-  onCreateProject,
-  onArchiveProject,
+  collectionsError,
+  selectedCollectionId,
+  onSelectCollection,
+  onCreateCollection,
+  onArchiveCollection,
 }: {
   activeTab: ShellTab;
   onTabChange: (tab: ShellTab) => void;
@@ -61,42 +43,32 @@ export function HomeShell({
   subLabel: string;
   callError: string;
   onToggleCall: () => void;
-  pendingCount: number;
-  tasks: DesktopTask[];
-  totalTasks: number;
-  page: number;
-  totalPages: number;
-  pageSize: number;
-  filter: string;
-  search: string;
-  tasksLoading: boolean;
-  onFilterChange: (filter: string) => void;
-  onSearchChange: (search: string) => void;
-  onReloadTasks: () => void;
-  onNewTask: () => void;
-  onPageChange: (page: number) => void;
-  onToggleTaskStatus: (task: DesktopTask) => void;
-  onInspectTask: (task: DesktopTask) => void;
   collections: Collection[];
-  projectsError?: string;
-  selectedProjectId: string | null;
-  onSelectProject: (id: string | null) => void;
-  onCreateProject: (form: NewProjectForm) => Promise<void>;
-  onArchiveProject: (id: string) => void;
+  collectionsError?: string;
+  selectedCollectionId: string | null;
+  onSelectCollection: (id: string | null) => void;
+  onCreateCollection: (form: NewCollection) => Promise<void>;
+  onArchiveCollection: (id: string) => void;
 }) {
   const { mapNode, mapReady, mapError } = useMissionMap();
 
   const handleMainDragMouseDown = (e: React.MouseEvent) => {
     if (
       e.button === 0 &&
-      !(e.target as HTMLElement).closest("button, a, input, select, textarea, [data-no-drag]")
+      !(e.target as HTMLElement).closest(
+        "button, a, input, select, textarea, [data-no-drag]",
+      )
     ) {
       void getCurrentWindow().startDragging();
     }
   };
 
   const handleMainDoubleClick = (e: React.MouseEvent) => {
-    if (!(e.target as HTMLElement).closest("button, a, input, select, textarea, [data-no-drag]")) {
+    if (
+      !(e.target as HTMLElement).closest(
+        "button, a, input, select, textarea, [data-no-drag]",
+      )
+    ) {
       void getCurrentWindow().toggleMaximize();
     }
   };
@@ -113,49 +85,30 @@ export function HomeShell({
         onToggleCall={onToggleCall}
       />
     );
-  } else if (activeTab === "tasks") {
+  } else if (activeTab === "timeline") {
     body = (
-      <TasksView
-        tasks={tasks}
-        totalTasks={totalTasks}
-        page={page}
-        totalPages={totalPages}
-        pageSize={pageSize}
-        filter={filter}
-        search={search}
-        tasksLoading={tasksLoading}
-        onFilterChange={onFilterChange}
-        onSearchChange={onSearchChange}
-        onReload={onReloadTasks}
-        onNewTask={onNewTask}
+      <TimelineView
+        collections={collections}
         onCollapse={() => onTabChange("agent")}
-        onPageChange={onPageChange}
-        onToggleStatus={onToggleTaskStatus}
-        onInspect={onInspectTask}
       />
     );
-  } else if (activeTab === "projects") {
-    body = selectedProjectId ? (
-      <ProjectDetailView
-        project={
-          collections.find((c) => c.id === selectedProjectId) ?? {
-            id: selectedProjectId,
-            name: "Project",
-            description: "",
-            kind: "project",
-            status: "active",
-          }
-        }
-        onBack={() => onSelectProject(null)}
-        onInspectTask={onInspectTask}
+  } else if (activeTab === "collections") {
+    const selected = collections.find((c) => c.id === selectedCollectionId);
+    body = selected ? (
+      <TimelineView
+        key={selected.id}
+        collection={selected}
+        collections={collections}
+        onBack={() => onSelectCollection(null)}
+        onCollapse={() => onTabChange("agent")}
       />
     ) : (
-      <ProjectsView
+      <CollectionsView
         collections={collections}
-        error={projectsError}
-        onSelectProject={onSelectProject}
-        onCreateProject={onCreateProject}
-        onArchiveProject={onArchiveProject}
+        error={collectionsError}
+        onSelect={onSelectCollection}
+        onCreate={onCreateCollection}
+        onArchive={onArchiveCollection}
         onCollapse={() => onTabChange("agent")}
       />
     );
@@ -183,14 +136,10 @@ export function HomeShell({
         <AppSidebar
           activeTab={activeTab}
           onTabChange={onTabChange}
-          pendingCount={pendingCount}
-          tasks={tasks}
           accountLabel={accountLabel}
           userName={userName}
           avatarUrl={avatarUrl}
           onSignOut={onSignOut}
-          onNewTask={onNewTask}
-          onInspectTask={onInspectTask}
         />
 
         <div className="pointer-events-none relative flex h-full min-w-0 flex-1 flex-col overflow-hidden">

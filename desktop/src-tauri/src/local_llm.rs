@@ -15,6 +15,10 @@ pub struct ExtractedSmsEvent {
     pub category: String,
     #[serde(default)]
     pub title: String,
+    #[serde(default)]
+    pub amount: Option<f64>,
+    #[serde(default)]
+    pub currency: Option<String>,
 }
 
 #[derive(Clone, Serialize)]

@@ -31,82 +31,80 @@ export type LocalEvent = {
   text: string;
 };
 
-export type DesktopTask = {
+export type SpanStatus =
+  "planned" | "active" | "waiting_user" | "done" | "failed" | "cancelled";
+
+export type ExecutionType = "autonomous" | "interactive" | "manual_human";
+
+export type Span = {
   id: string;
+  parent_id: string | null;
   title: string;
-  instruction: string;
-  status: string;
-  execution_type: string;
-  project_name?: string | null;
-  collection_id?: string | null;
-  feasibility_reasoning?: string | null;
-  execution_result?: unknown;
+  notes: string;
+  category: string;
+  source: string;
+  status: SpanStatus;
+  start_at: string | null;
+  end_at: string | null;
+  due_at: string | null;
+  priority: number;
+  execution_type: ExecutionType | null;
+  execution_result: unknown;
+  data: Record<string, unknown>;
+  collection_ids: string[];
+  version: number;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SpanQuery = {
+  from?: string;
+  to?: string;
+  collectionId?: string;
+  status?: SpanStatus;
+  unscheduled?: boolean;
+};
+
+export type NewSpan = {
+  title: string;
+  notes?: string;
+  category?: string;
+  status?: SpanStatus;
+  start_at?: string | null;
+  end_at?: string | null;
   due_at?: string | null;
-  created_at?: string | null;
-  completed_at?: string | null;
+  execution_type?: ExecutionType | null;
+  data?: Record<string, unknown>;
+  collection_ids?: string[];
 };
 
-export type PaginatedTasks = {
-  items: DesktopTask[];
-  total: number;
-  page: number;
-  page_size: number;
-  total_pages: number;
-};
+export type SpanPatch = Partial<
+  Pick<
+    Span,
+    "title" | "notes" | "category" | "status" | "start_at" | "end_at" | "due_at"
+  >
+>;
 
-export type GetTasksArgs = {
-  page?: number;
-  page_size?: number;
-  status?: string;
-  search?: string;
-  collection_id?: string;
-};
-
-export type CreateTaskPayload = {
-  title: string;
-  instruction?: string;
-  execution_type?: string;
-  project_name?: string;
-  collection_id?: string;
-  due_at?: string;
-};
+export type CollectionKind = "trip" | "event" | "course" | "area" | "custom";
 
 export type Collection = {
   id: string;
   name: string;
   description: string;
-  kind: string;
+  kind: CollectionKind;
   status: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  span_count: number;
 };
 
-export type CreateCollectionPayload = {
+export type NewCollection = {
   name: string;
   description?: string;
-  kind?: string;
-};
-
-export type UpdateTaskPayload = {
-  task_id: string;
-  status?: string;
-  feasibility_reasoning?: string;
-  execution_result?: unknown;
-};
-
-export type TimelineEntry = {
-  id: string;
-  source: "task" | "schedule" | "reminder" | "device";
-  title: string;
-  status: string;
-  kind: "completed" | "scheduled" | "overdue";
-  start_at: string;
-  end_at?: string | null;
-  collection_id?: string | null;
-  metadata?: unknown;
-};
-
-export type GetTimelineArgs = {
-  from: string;
-  to: string;
+  kind?: CollectionKind;
+  starts_at?: string | null;
+  ends_at?: string | null;
 };
 
 export type LocalLlmDownloadProgress = {
@@ -125,26 +123,33 @@ export const api = {
   setWindowSize: (width: number, height: number) =>
     invoke("set_window_size", { width, height }),
   centerWindow: () => invoke("center_window"),
-  getTasks: (args?: GetTasksArgs) =>
-    invoke<PaginatedTasks>("get_tasks", { args: args ?? null }),
-  getTimeline: (args: GetTimelineArgs) =>
-    invoke<TimelineEntry[]>("get_timeline", args),
+  getSpans: (q: SpanQuery) =>
+    invoke<Span[]>("get_spans", {
+      from: q.from ?? null,
+      to: q.to ?? null,
+      collectionId: q.collectionId ?? null,
+      status: q.status ?? null,
+      unscheduled: q.unscheduled ?? null,
+    }),
+  createSpan: (payload: NewSpan) => invoke<Span>("create_span", { payload }),
+  updateSpan: (id: string, patch: SpanPatch) =>
+    invoke<Span>("update_span", { id, patch }),
+  deleteSpan: (id: string) => invoke<void>("delete_span", { id }),
   isLocalLlmDownloaded: () => invoke<boolean>("is_local_llm_downloaded"),
   downloadLocalLlm: () => invoke<void>("download_local_llm"),
   isLocalModelReady: () => invoke<boolean>("is_local_model_ready"),
-  createTask: (payload: CreateTaskPayload) =>
-    invoke<DesktopTask>("create_task", { payload }),
-  updateTask: (payload: UpdateTaskPayload) =>
-    invoke<DesktopTask>("update_task", { payload }),
   startCall: () => invoke<CallStatus>("start_call"),
   endCall: () => invoke<CallStatus>("end_call"),
   callStatus: () => invoke<CallStatus>("call_status"),
   getCollections: () => invoke<Collection[]>("get_collections"),
-  createCollection: (payload: CreateCollectionPayload) =>
-    invoke<Collection>("create_collection", payload),
+  createCollection: (payload: NewCollection) =>
+    invoke<Collection>("create_collection", { payload }),
+  updateCollection: (id: string, patch: Partial<NewCollection>) =>
+    invoke<Collection>("update_collection", { id, patch }),
   archiveCollection: (id: string) => invoke<void>("archive_collection", { id }),
-  deviceLinkStatus: () =>
-    invoke<DeviceLinkStatus>("get_device_link_status"),
+  setSpanCollection: (collectionId: string, spanId: string, member: boolean) =>
+    invoke<void>("set_span_collection", { collectionId, spanId, member }),
+  deviceLinkStatus: () => invoke<DeviceLinkStatus>("get_device_link_status"),
   setRemoteControl: (enabled: boolean) =>
     invoke<boolean>("set_remote_control", { enabled }),
   getLocalEvents: () => invoke<LocalEvent[]>("get_local_events"),
