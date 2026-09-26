@@ -43,20 +43,17 @@ Nothing secret to Vox servers (service tokens, host secrets, JWT signing keys) i
 
 GitHub Actions workflow `.github/workflows/release.yml` builds installers when you push a `v*` tag or run the workflow manually.
 
-Configure these **repository secrets** on `vox-desktop`:
+Configure these **environment variables** on the `production` environment in `vox-desktop`:
 
-| Secret | Purpose |
+| Name | Purpose |
 | --- | --- |
 | `VOX_SUPABASE_URL` | Public Supabase project URL |
-| `VOX_SUPABASE_ANON_KEY` | Public Supabase anon key |
+| `VOX_SUPABASE_ANON_KEY` | Public Supabase anon / publishable key |
 | `VOX_API_URL` | Core API origin (`https://api.voxagent.in`) |
 | `VOX_BRIDGE_URL` | Bridge origin (usually same as API) |
 | `VOX_OAUTH_REDIRECT_URI` | Optional; defaults to `vox://auth/callback` |
-| `TAURI_SIGNING_PRIVATE_KEY` | Optional updater signing key |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Optional updater key password |
-| `APPLE_CERTIFICATE` | Optional macOS Developer ID cert (base64) |
-| `APPLE_CERTIFICATE_PASSWORD` | Optional |
-| `APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID` | Optional notarization |
+
+Keep Apple/Tauri signing material in **secrets**, not variables.
 
 Public config is injected at **build time** via `src-tauri/build.rs`. End users never set env vars.
 
