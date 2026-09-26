@@ -320,7 +320,7 @@ async fn handle_frame(app: &AppHandle, terminal: &TerminalManager, frame: Value)
             let app_clone = app.clone();
             let result = tokio::task::spawn_blocking(move || terminal.run_command(&command)).await;
             let response = match result {
-                Ok(Ok(output)) => {
+                Ok(Ok((output, exit_code))) => {
                     for line in output.lines() {
                         let trimmed = line.trim_end();
                         if !trimmed.is_empty() {
@@ -328,7 +328,7 @@ async fn handle_frame(app: &AppHandle, terminal: &TerminalManager, frame: Value)
                         }
                     }
                     emit_local_event(&app_clone, "success", "Vox reading command output");
-                    json!({ "id": id, "ok": true, "output": output })
+                    json!({ "id": id, "ok": true, "output": output, "exit_code": exit_code })
                 }
                 Ok(Err(err)) => {
                     emit_local_event(&app_clone, "error", &format!("Command failed: {err}"));
