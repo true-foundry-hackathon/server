@@ -52,6 +52,8 @@ pub struct DesktopTask {
     #[serde(default, alias = "project_id", alias = "collection_id")]
     pub project_name: Option<String>,
     #[serde(default)]
+    pub collection_id: Option<String>,
+    #[serde(default)]
     pub feasibility_reasoning: Option<String>,
     #[serde(default)]
     pub execution_result: Option<serde_json::Value>,
@@ -69,6 +71,7 @@ pub struct CreateTaskPayload {
     pub instruction: Option<String>,
     pub execution_type: Option<String>,
     pub project_name: Option<String>,
+    pub collection_id: Option<String>,
     pub due_at: Option<String>,
 }
 
@@ -90,6 +93,8 @@ pub struct GetTasksArgs {
     pub status: Option<String>,
     #[serde(default)]
     pub search: Option<String>,
+    #[serde(default)]
+    pub collection_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
@@ -130,6 +135,7 @@ impl TaskManager {
                     status: "completed".to_string(),
                     execution_type: "autonomous".to_string(),
                     project_name: Some("Vox Core".to_string()),
+                    collection_id: None,
                     feasibility_reasoning: Some("Completed autonomously using internal audio telemetry buffers.".to_string()),
                     execution_result: Some(serde_json::json!({ "p95_latency_ms": 174, "opus_frame_loss_pct": 0.02 })),
                     due_at: Some("Today".to_string()),
@@ -143,6 +149,7 @@ impl TaskManager {
                     status: "executing".to_string(),
                     execution_type: "autonomous".to_string(),
                     project_name: Some("Bridge Infrastructure".to_string()),
+                    collection_id: None,
                     feasibility_reasoning: Some("Worker currently polling bridge health endpoints and TLS certificate expiries.".to_string()),
                     execution_result: None,
                     due_at: Some("In 2h".to_string()),
@@ -156,6 +163,7 @@ impl TaskManager {
                     status: "pending".to_string(),
                     execution_type: "interactive".to_string(),
                     project_name: Some("Vox Desktop".to_string()),
+                    collection_id: None,
                     feasibility_reasoning: None,
                     execution_result: None,
                     due_at: Some("Tomorrow".to_string()),
@@ -169,6 +177,7 @@ impl TaskManager {
                     status: "pending".to_string(),
                     execution_type: "manual_human".to_string(),
                     project_name: Some("Releases".to_string()),
+                    collection_id: None,
                     feasibility_reasoning: None,
                     execution_result: None,
                     due_at: Some("Friday".to_string()),
@@ -283,7 +292,11 @@ impl TaskManager {
                             .to_lowercase()
                             .contains(&search)
                 };
-                matches_status && matches_search
+                let matches_collection = match args.collection_id.as_deref() {
+                    None => true,
+                    Some(cid) => t.collection_id.as_deref() == Some(cid),
+                };
+                matches_status && matches_search && matches_collection
             })
             .collect();
 
@@ -426,6 +439,11 @@ async fn get_tasks(
                 sb_url.push_str(&format!("&title=ilike.*{}*", q));
             }
         }
+        if let Some(cid) = &args.collection_id {
+            if !cid.is_empty() {
+                sb_url.push_str(&format!("&collection_id=eq.{}", cid));
+            }
+        }
 
         if let Ok(resp) = client
             .get(&sb_url)
@@ -465,12 +483,17 @@ async fn get_tasks(
         }
 
         // 2. Vox Core API query to DB
-        let core_url = format!(
+        let mut core_url = format!(
             "{}/v1/tasks?limit={}&offset={}",
             config.api_url.trim_end_matches('/'),
             limit,
             offset
         );
+        if let Some(cid) = &args.collection_id {
+            if !cid.is_empty() {
+                core_url.push_str(&format!("&collection_id={}", cid));
+            }
+        }
         if let Ok(resp) = client
             .get(&core_url)
             .header("authorization", format!("Bearer {}", session.vox_token))
@@ -514,6 +537,7 @@ async fn create_task(
             .clone()
             .unwrap_or_else(|| "autonomous".to_string()),
         project_name: payload.project_name.clone(),
+        collection_id: payload.collection_id.clone(),
         feasibility_reasoning: None,
         execution_result: None,
         due_at: payload.due_at.clone(),
@@ -538,6 +562,11 @@ async fn create_task(
         if let Some(due) = &new_task.due_at {
             sb_body["due_at"] = serde_json::json!(due);
         }
+        if let Some(cid) = &new_task.collection_id {
+            if !cid.is_empty() {
+                sb_body["collection_id"] = serde_json::json!(cid);
+            }
+        }
         let _ = client
             .post(&sb_url)
             .header("apikey", &config.supabase_anon_key)
@@ -550,12 +579,19 @@ async fn create_task(
 
         // Also post to Vox Core API
         let core_url = format!("{}/v1/tasks", config.api_url.trim_end_matches('/'));
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "title": new_task.title,
             "instruction": new_task.instruction,
             "priority": 0,
             "due_at": new_task.due_at,
         });
+        if let Some(cid) = &new_task.collection_id {
+            if !cid.is_empty() {
+                if let Ok(parsed) = uuid::Uuid::parse_str(cid) {
+                    body["collection_id"] = serde_json::json!(parsed);
+                }
+            }
+        }
         let _ = client
             .post(&core_url)
             .header("authorization", format!("Bearer {}", session.vox_token))
