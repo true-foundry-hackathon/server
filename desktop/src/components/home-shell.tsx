@@ -203,13 +203,13 @@ export function HomeShell({
           />
 
           {/* Main Stage over Map */}
-          <div className="pointer-events-none relative flex min-h-0 flex-1 flex-col overflow-hidden p-4 pt-0">
+          <div className="pointer-events-none relative flex min-h-0 flex-1 flex-col overflow-hidden">
             {activeTab === "agent" ? (
-              <div className="pointer-events-none flex h-full w-full flex-col">
+              <div className="pointer-events-none flex h-full w-full flex-col p-4 pt-0">
                 {body}
               </div>
             ) : (
-              <div className="pointer-events-auto flex h-full w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#07080a]/80 shadow-2xl backdrop-blur-md">
+              <div className="pointer-events-auto flex h-full w-full flex-col overflow-hidden bg-[#07080a]">
                 {body}
               </div>
             )}

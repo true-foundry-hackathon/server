@@ -90,6 +90,22 @@ pub struct PaginatedTasks {
     pub total_pages: usize,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct TimelineEntry {
+    pub id: String,
+    pub source: String,
+    pub title: String,
+    pub status: String,
+    pub kind: String,
+    pub start_at: String,
+    #[serde(default)]
+    pub end_at: Option<String>,
+    #[serde(default)]
+    pub collection_id: Option<String>,
+    #[serde(default)]
+    pub metadata: serde_json::Value,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct CallStatus {
     pub active: bool,

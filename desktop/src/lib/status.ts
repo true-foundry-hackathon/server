@@ -18,6 +18,7 @@ export function statusBadgeVariant(status: string) {
       return "default" as const;
     case "executing":
     case "failed":
+    case "overdue":
       return "destructive" as const;
     default:
       return "secondary" as const;

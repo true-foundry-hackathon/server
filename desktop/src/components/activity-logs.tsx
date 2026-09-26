@@ -51,12 +51,12 @@ export function ActivityLogs() {
   return (
     <div
       aria-label="Activity Logs"
-      className="pointer-events-auto absolute top-10 right-4 z-30 flex max-h-[55vh] w-[340px] flex-col overflow-hidden bg-transparent select-text opacity-50 transition-opacity duration-300 hover:opacity-90"
+      className="pointer-events-auto absolute right-4 bottom-4 z-10 flex max-h-[55vh] w-[340px] flex-col overflow-hidden bg-transparent select-text opacity-50 transition-opacity duration-300 hover:opacity-90"
     >
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 hover:[&::-webkit-scrollbar-thumb]:bg-white/20"
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         <div className="flex flex-col space-y-1.5">
           {events.map((ev) => {

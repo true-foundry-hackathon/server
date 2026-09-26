@@ -1,7 +1,8 @@
 use crate::auth::AuthManager;
 use crate::task_store::TaskManager;
 use crate::types::{
-    Collection, CreateTaskPayload, DesktopTask, GetTasksArgs, PaginatedTasks, UpdateTaskPayload,
+    Collection, CreateTaskPayload, DesktopTask, GetTasksArgs, PaginatedTasks, TimelineEntry,
+    UpdateTaskPayload,
 };
 use std::time::Duration;
 use tauri::State;
@@ -41,6 +42,39 @@ async fn send(
         req = req.json(body);
     }
     req.send().await
+}
+
+#[tauri::command]
+pub async fn get_timeline(
+    from: String,
+    to: String,
+    auth: State<'_, AuthManager>,
+) -> Result<Vec<TimelineEntry>, String> {
+    let session = auth.current_session().ok_or("Not signed in")?;
+    let config = auth.config();
+    let client = reqwest::Client::new();
+    let path = format!("/v1/timeline?from={from}&to={to}");
+    let resp = send(
+        &client,
+        RequestSpec {
+            base_url: &config.api_url,
+            path: &path,
+            method: reqwest::Method::GET,
+            bearer_token: &session.vox_token,
+            apikey: None,
+            prefer: None,
+            body: None,
+            timeout_ms: 5000,
+        },
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("timeline request failed: {}", resp.status()));
+    }
+    resp.json::<Vec<TimelineEntry>>()
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

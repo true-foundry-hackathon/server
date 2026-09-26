@@ -92,6 +92,23 @@ export type UpdateTaskPayload = {
   execution_result?: unknown;
 };
 
+export type TimelineEntry = {
+  id: string;
+  source: "task" | "schedule" | "reminder";
+  title: string;
+  status: string;
+  kind: "completed" | "scheduled" | "overdue";
+  start_at: string;
+  end_at?: string | null;
+  collection_id?: string | null;
+  metadata?: unknown;
+};
+
+export type GetTimelineArgs = {
+  from: string;
+  to: string;
+};
+
 export const api = {
   getAuthState: () => invoke<AuthState>("get_auth_state"),
   signInWithGoogle: () => invoke<AuthState>("sign_in_with_google"),
@@ -103,6 +120,8 @@ export const api = {
   centerWindow: () => invoke("center_window"),
   getTasks: (args?: GetTasksArgs) =>
     invoke<PaginatedTasks>("get_tasks", { args: args ?? null }),
+  getTimeline: (args: GetTimelineArgs) =>
+    invoke<TimelineEntry[]>("get_timeline", args),
   createTask: (payload: CreateTaskPayload) =>
     invoke<DesktopTask>("create_task", { payload }),
   updateTask: (payload: UpdateTaskPayload) =>

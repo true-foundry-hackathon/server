@@ -125,6 +125,7 @@ pub fn run() {
             sync_client::create_task,
             sync_client::update_task,
             sync_client::get_collections,
+            sync_client::get_timeline,
             sync_client::create_collection,
             sync_client::archive_collection,
             device_link::get_device_link_status,
