@@ -11,6 +11,7 @@ mod pkce;
 mod session;
 mod session_store;
 mod sync_client;
+mod system_stats;
 mod task_store;
 mod terminal;
 mod types;
@@ -18,6 +19,7 @@ mod types;
 use auth::AuthManager;
 use deep_link::{filter_vox_urls, handle_oauth_callback_urls};
 use session::SessionManager;
+use system_stats::SystemStatsState;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
 
@@ -74,6 +76,8 @@ pub fn run() {
         .manage(SessionManager::new())
         .manage(task_store::TaskManager::new())
         .manage(device_link::DeviceLinkState::default())
+        .manage(device_link::RemoteControl::load())
+        .manage(SystemStatsState::new())
         .setup(|app| {
             #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
             {
@@ -113,6 +117,9 @@ pub fn run() {
             sync_client::create_collection,
             sync_client::archive_collection,
             device_link::get_device_link_status,
+            device_link::get_remote_control,
+            device_link::set_remote_control,
+            system_stats::get_system_stats,
             #[cfg(target_os = "macos")]
             macos_location::get_native_location
         ])
