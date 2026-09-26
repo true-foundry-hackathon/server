@@ -1,3 +1,7 @@
 /dist/
 /target/
 /Cargo.lock
+.env
+.env.local
+*.dmg
+*.app
