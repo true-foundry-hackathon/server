@@ -23,6 +23,7 @@ export type DesktopTask = {
   status: string;
   execution_type: string;
   project_name?: string | null;
+  collection_id?: string | null;
   feasibility_reasoning?: string | null;
   execution_result?: unknown;
   due_at?: string | null;
@@ -43,6 +44,7 @@ export type GetTasksArgs = {
   page_size?: number;
   status?: string;
   search?: string;
+  collection_id?: string;
 };
 
 export type CreateTaskPayload = {
@@ -50,7 +52,22 @@ export type CreateTaskPayload = {
   instruction?: string;
   execution_type?: string;
   project_name?: string;
+  collection_id?: string;
   due_at?: string;
+};
+
+export type Collection = {
+  id: string;
+  name: string;
+  description: string;
+  kind: string;
+  status: string;
+};
+
+export type CreateCollectionPayload = {
+  name: string;
+  description?: string;
+  kind?: string;
 };
 
 export type UpdateTaskPayload = {
@@ -76,6 +93,10 @@ export const api = {
   startCall: () => invoke<CallStatus>("start_call"),
   endCall: () => invoke<CallStatus>("end_call"),
   callStatus: () => invoke<CallStatus>("call_status"),
+  getCollections: () => invoke<Collection[]>("get_collections"),
+  createCollection: (payload: CreateCollectionPayload) =>
+    invoke<Collection>("create_collection", payload),
+  archiveCollection: (id: string) => invoke<void>("archive_collection", { id }),
 };
 
 /** Opens the OS location-privacy settings pane directly. */
