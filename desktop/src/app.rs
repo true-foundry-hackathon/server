@@ -224,9 +224,12 @@ pub fn App() -> Element {
     rsx! {
         link { rel: "stylesheet", href: CSS }
         ThinkingOrbScript {}
+        div {
+            class: "window-drag-bar",
+            "data-tauri-drag-region": true,
+        }
         main {
             class: "raycast-shell",
-            "data-tauri-drag-region": "true",
             tabindex: "0",
             onkeydown: move |e: KeyboardEvent| {
                 let key_str = e.key().to_string();
@@ -276,8 +279,10 @@ pub fn App() -> Element {
             if !signed_in {
                 div {
                     class: "intro-layout",
+                    "data-tauri-drag-region": true,
                     div {
                         class: "intro-orb-hero",
+                        "data-tauri-drag-region": true,
                         VoxLogo {
                             size: 120,
                             animated: true,
@@ -292,8 +297,10 @@ pub fn App() -> Element {
                     }
                     div {
                         class: "intro-container",
+                        "data-tauri-drag-region": true,
                         div {
                             class: "brand-lockup",
+                            "data-tauri-drag-region": true,
                             CoralDiamond {},
                             h1 { class: "brand-title", "Vox" }
                             span { class: "brand-badge", "Desktop" }
@@ -303,7 +310,7 @@ pub fn App() -> Element {
                             "Use your Vox account to talk to your agent."
                         }
                         div {
-                            class: "auth-panel",
+                            class: "auth-panel no-drag",
                             button {
                                 class: "btn-primary-mist",
                                 onclick: google_sign_in,
@@ -323,6 +330,7 @@ pub fn App() -> Element {
                         }
                         footer {
                             class: "footer-strip",
+                            "data-tauri-drag-region": true,
                             span { "v0.1.0" }
                             span { class: "footer-sep", "|" }
                             span { "macOS 13+" }
@@ -334,8 +342,10 @@ pub fn App() -> Element {
             } else {
                 div {
                     class: "cockpit-view",
+                    "data-tauri-drag-region": true,
                     header {
                         class: "cockpit-header",
+                        "data-tauri-drag-region": true,
                         div {
                             class: "cockpit-brand",
                             CoralDiamond {},

@@ -94,6 +94,35 @@ button, input {
   background-color: var(--color-void-black);
 }
 
+/* Frameless window: drag chrome + keep controls clickable */
+.window-drag-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  z-index: 50;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+[data-tauri-drag-region] {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+button,
+input,
+a,
+.no-drag,
+.auth-panel,
+.account-pill,
+.call-action-group,
+.thinking-orb-canvas {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
 /* Background subtle ambient vignette */
 .raycast-shell::before {
   content: "";
