@@ -3,6 +3,7 @@ import {
   BarChart3,
   BookOpen,
   Database,
+  FolderKanban,
   ListTodo,
   Mic,
   Settings,
@@ -12,6 +13,7 @@ import { cn } from "@/lib/utils";
 export type HomeRailId =
   | "lms"
   | "tasks"
+  | "projects"
   | "voice"
   | "data"
   | "analytics"
@@ -36,6 +38,13 @@ const ITEMS: {
     label: "Tasks",
     hint: "Your work and agent jobs",
     icon: ListTodo,
+    accent: "hover:text-electric-sky data-[active=true]:text-electric-sky",
+  },
+  {
+    id: "projects",
+    label: "Projects",
+    hint: "Tasks, notes, and datasets by project",
+    icon: FolderKanban,
     accent: "hover:text-electric-sky data-[active=true]:text-electric-sky",
   },
   {
