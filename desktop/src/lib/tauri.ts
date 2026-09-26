@@ -8,6 +8,7 @@ export type AuthState = {
   email: string | null;
   bridge_url: string;
   api_url: string;
+  has_phone: boolean;
 };
 
 export type CallStatus = {
@@ -92,6 +93,8 @@ export const api = {
   getAuthState: () => invoke<AuthState>("get_auth_state"),
   signInWithGoogle: () => invoke<AuthState>("sign_in_with_google"),
   signOut: () => invoke<AuthState>("sign_out"),
+  linkPhone: (phoneNumber: string) =>
+    invoke<AuthState>("link_phone", { phoneNumber }),
   setWindowSize: (width: number, height: number) =>
     invoke("set_window_size", { width, height }),
   centerWindow: () => invoke("center_window"),

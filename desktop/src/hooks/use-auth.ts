@@ -12,6 +12,7 @@ const emptyAuth: AuthState = {
   email: null,
   bridge_url: "",
   api_url: "",
+  has_phone: false,
 };
 
 export function useAuth() {
@@ -69,5 +70,18 @@ export function useAuth() {
     setAuthError("");
   }
 
-  return { auth, authBusy, authError, googleSignIn, signOut };
+  async function linkPhone(phoneNumber: string) {
+    setAuthBusy(true);
+    setAuthError("");
+    try {
+      const next = await api.linkPhone(phoneNumber);
+      setAuth(next);
+    } catch (err) {
+      setAuthError(invokeErrorMessage(err));
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  return { auth, authBusy, authError, googleSignIn, signOut, linkPhone };
 }
