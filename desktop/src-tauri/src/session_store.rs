@@ -14,6 +14,8 @@ pub struct StoredSession {
     pub email: Option<String>,
     pub vox_token: String,
     pub expires_at: Option<String>,
+    #[serde(default)]
+    pub has_phone: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

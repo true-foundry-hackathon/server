@@ -105,6 +105,7 @@ pub fn run() {
             auth::get_auth_state,
             auth::sign_in_with_google,
             auth::sign_out,
+            auth::link_phone,
             center_window,
             session::start_call,
             session::end_call,

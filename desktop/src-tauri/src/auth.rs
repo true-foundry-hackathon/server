@@ -30,6 +30,7 @@ pub struct AuthState {
     pub email: Option<String>,
     pub bridge_url: String,
     pub api_url: String,
+    pub has_phone: bool,
 }
 
 #[derive(Deserialize)]
@@ -52,11 +53,13 @@ struct AuthExchangeResponse {
     token: String,
     user_id: Uuid,
     expires_at: String,
+    has_phone: bool,
 }
 
 #[derive(Deserialize)]
 struct CoreMeResponse {
     user_id: Uuid,
+    has_phone: bool,
 }
 
 struct PendingOauth {
@@ -95,6 +98,7 @@ impl AuthManager {
             email: session.as_ref().and_then(|s| s.email.clone()),
             bridge_url: self.config.bridge_url.clone(),
             api_url: self.config.api_url.clone(),
+            has_phone: session.as_ref().map(|s| s.has_phone).unwrap_or(false),
         }
     }
 
@@ -382,6 +386,44 @@ impl AuthManager {
             .map_err(|e| format!("Invalid Google sign-in response: {e}"))
     }
 
+    /// Renews the Vox session from the stored Supabase refresh token when it
+    /// is missing an expiry or expires within a day, so long-running links
+    /// (the device socket) don't silently die when the token lapses.
+    pub async fn refresh_if_expiring(&self) -> Result<(), String> {
+        let Some(session) = self.current_session() else {
+            return Ok(());
+        };
+        let expiring = session
+            .expires_at
+            .as_deref()
+            .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+            .is_none_or(|at| at.with_timezone(&chrono::Utc) - chrono::Utc::now() < chrono::Duration::days(1));
+        if !expiring {
+            return Ok(());
+        }
+
+        let url = format!(
+            "{}/auth/v1/token?grant_type=refresh_token",
+            self.config.supabase_url
+        );
+        let response = reqwest::Client::new()
+            .post(&url)
+            .header("apikey", &self.config.supabase_anon_key)
+            .json(&serde_json::json!({ "refresh_token": session.refresh_token }))
+            .timeout(std::time::Duration::from_secs(10))
+            .send()
+            .await
+            .map_err(|e| format!("session refresh failed: {e}"))?;
+        if !response.status().is_success() {
+            return Err(format!("session refresh rejected: {}", response.status()));
+        }
+        let tokens = response
+            .json::<SupabaseTokenResponse>()
+            .await
+            .map_err(|e| format!("invalid session refresh response: {e}"))?;
+        self.establish_session(tokens).await.map(|_| ())
+    }
+
     async fn establish_session(&self, tokens: SupabaseTokenResponse) -> Result<AuthState, String> {
         let (user_id, email) = match tokens.user {
             Some(user) => (user.id, user.email),
@@ -400,6 +442,7 @@ impl AuthManager {
             email: email.or(Some(user_id)),
             vox_token: exchange.token,
             expires_at: Some(exchange.expires_at),
+            has_phone: exchange.has_phone,
         };
 
         save_session(&session)?;
@@ -426,6 +469,63 @@ pub async fn sign_in_with_google(
 #[tauri::command]
 pub fn sign_out(auth: State<'_, AuthManager>) -> Result<AuthState, String> {
     auth.sign_out()
+}
+
+#[derive(Serialize)]
+struct LinkPhoneRequest<'a> {
+    phone_number: &'a str,
+}
+
+#[derive(Deserialize)]
+struct LinkPhoneResponse {
+    #[allow(dead_code)]
+    user_id: Uuid,
+    #[allow(dead_code)]
+    merged: bool,
+}
+
+impl AuthManager {
+    pub async fn link_phone(&self, phone_number: String) -> Result<AuthState, String> {
+        let session = self
+            .current_session()
+            .ok_or_else(|| "Not signed in".to_string())?;
+        let url = format!("{}/v1/me/phone", self.config.api_url);
+        let response = reqwest::Client::new()
+            .post(&url)
+            .header("authorization", format!("Bearer {}", session.vox_token))
+            .json(&LinkPhoneRequest {
+                phone_number: &phone_number,
+            })
+            .send()
+            .await
+            .map_err(|e| format!("Failed to reach Vox API: {e}"))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(format!("Could not save phone number ({status}): {text}"));
+        }
+        let _: LinkPhoneResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Invalid phone link response: {e}"))?;
+
+        let mut updated = session;
+        updated.has_phone = true;
+        save_session(&updated)?;
+        if let Ok(mut guard) = self.session.lock() {
+            *guard = Some(updated);
+        }
+        Ok(self.state())
+    }
+}
+
+#[tauri::command]
+pub async fn link_phone(
+    phone_number: String,
+    auth: State<'_, AuthManager>,
+) -> Result<AuthState, String> {
+    auth.link_phone(phone_number).await
 }
 
 fn oauth_redirect_for_runtime(configured: &str) -> String {
@@ -576,6 +676,7 @@ async fn exchange_with_core(
         token: access_token.to_string(),
         user_id: me.user_id,
         expires_at: String::new(),
+        has_phone: me.has_phone,
     })
 }
 
