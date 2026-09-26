@@ -3,7 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EmptyTasks, TaskTable } from "@/components/task-table";
+import { TaskTable } from "@/components/task-table";
 import { api, type Collection, type DesktopTask } from "@/lib/tauri";
 
 function ComingLater({ label }: { label: string }) {
@@ -76,7 +76,9 @@ export function ProjectDetailView({
           </TabsList>
           <TabsContent value="tasks">
             {loading ? null : tasks.length === 0 ? (
-              <EmptyTasks onNewTask={() => undefined} />
+              <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+                <p className="text-sm text-ash">No tasks in this project yet.</p>
+              </div>
             ) : (
               <TaskTable
                 tasks={tasks}

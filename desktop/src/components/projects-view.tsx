@@ -17,12 +17,14 @@ const emptyNewProject: NewProjectForm = {
 
 export function ProjectsView({
   collections,
+  error,
   onSelectProject,
   onCreateProject,
   onArchiveProject,
   onCollapse,
 }: {
   collections: Collection[];
+  error?: string;
   onSelectProject: (id: string) => void;
   onCreateProject: (form: NewProjectForm) => Promise<void>;
   onArchiveProject: (id: string) => void;
@@ -64,6 +66,8 @@ export function ProjectsView({
           </Button>
         </div>
       </header>
+
+      {error ? <p className="px-7 pt-3 text-xs text-coral-pulse">{error}</p> : null}
 
       <div className="no-drag min-h-0 flex-1 overflow-auto px-7 py-6">
         {active.length === 0 ? (

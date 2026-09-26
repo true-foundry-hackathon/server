@@ -38,7 +38,11 @@ export function NewProjectDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="shadow-key border-0 bg-ink sm:max-w-lg">
+      <DialogContent
+        className="shadow-key border-0 bg-ink sm:max-w-lg"
+        onEscapeKeyDown={(e) => e.stopPropagation()}
+      >
+
         <DialogHeader>
           <DialogTitle>New Project</DialogTitle>
         </DialogHeader>

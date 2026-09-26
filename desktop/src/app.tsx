@@ -61,6 +61,7 @@ export default function App() {
   const [newTask, setNewTask] = useState<NewTaskForm>(emptyNewTask);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [projectsError, setProjectsError] = useState("");
 
   const loadCollections = useCallback(async () => {
     try {
@@ -165,6 +166,8 @@ export default function App() {
         if (showNewTask) setShowNewTask(false);
         else if (inspectTask) setInspectTask(null);
         else if (showProfile) setShowProfile(false);
+        else if (view === "projects" && selectedProjectId) setSelectedProjectId(null);
+        else if (view === "projects") setView("dashboard");
         else if (view === "tasks") setView("dashboard");
         else if (isActive || callState === "connecting") void endCall();
       }
@@ -181,6 +184,7 @@ export default function App() {
     inspectTask,
     showProfile,
     callState,
+    selectedProjectId,
   ]);
 
   async function googleSignIn() {
@@ -284,18 +288,29 @@ export default function App() {
   }
 
   async function createProject(form: NewProjectForm) {
-    await api.createCollection({
-      name: form.name.trim(),
-      description: form.description.trim() || undefined,
-      kind: form.kind,
-    });
-    await loadCollections();
+    try {
+      await api.createCollection({
+        name: form.name.trim(),
+        description: form.description.trim() || undefined,
+        kind: form.kind,
+      });
+      setProjectsError("");
+      await loadCollections();
+    } catch (err) {
+      setProjectsError(invokeErrorMessage(err));
+      throw err;
+    }
   }
 
   async function archiveProject(id: string) {
-    await api.archiveCollection(id);
-    if (selectedProjectId === id) setSelectedProjectId(null);
-    await loadCollections();
+    try {
+      await api.archiveCollection(id);
+      if (selectedProjectId === id) setSelectedProjectId(null);
+      setProjectsError("");
+      await loadCollections();
+    } catch (err) {
+      setProjectsError(invokeErrorMessage(err));
+    }
   }
 
   const orbState: VoxOrbVisualState = isActive
@@ -397,6 +412,7 @@ export default function App() {
         ) : (
           <ProjectsView
             collections={collections}
+            error={projectsError}
             onSelectProject={setSelectedProjectId}
             onCreateProject={createProject}
             onArchiveProject={(id) => void archiveProject(id)}

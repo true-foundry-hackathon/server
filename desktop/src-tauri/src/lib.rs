@@ -49,7 +49,7 @@ pub struct DesktopTask {
     pub status: String,
     #[serde(default = "default_execution_type")]
     pub execution_type: String,
-    #[serde(default, alias = "project_id", alias = "collection_id")]
+    #[serde(default, alias = "project_id")]
     pub project_name: Option<String>,
     #[serde(default)]
     pub collection_id: Option<String>,
@@ -981,4 +981,41 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DesktopTask;
+
+    /// Regression test for the alias collision that broke the local task
+    /// cache: `project_name` used to carry `alias = "collection_id"`, which
+    /// collided with the real `collection_id` field's own name. Since
+    /// `DesktopTask` always serializes both keys, re-parsing that JSON
+    /// failed with "duplicate field `project_name`", silently resetting the
+    /// on-disk cache. This asserts the round-trip now succeeds and both
+    /// fields keep their values.
+    #[test]
+    fn desktop_task_round_trips_project_name_and_collection_id() {
+        let task = DesktopTask {
+            id: "task-1".to_string(),
+            title: "Test task".to_string(),
+            instruction: "do the thing".to_string(),
+            status: "pending".to_string(),
+            execution_type: "autonomous".to_string(),
+            project_name: Some("Vox Core".to_string()),
+            collection_id: Some("abc-123".to_string()),
+            feasibility_reasoning: None,
+            execution_result: None,
+            due_at: None,
+            created_at: None,
+            completed_at: None,
+        };
+
+        let json = serde_json::to_string(&task).expect("serialize DesktopTask");
+        let round_tripped: DesktopTask =
+            serde_json::from_str(&json).expect("re-parse serialized DesktopTask");
+
+        assert_eq!(round_tripped.project_name, Some("Vox Core".to_string()));
+        assert_eq!(round_tripped.collection_id, Some("abc-123".to_string()));
+    }
 }
