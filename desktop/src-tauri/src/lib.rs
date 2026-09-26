@@ -65,6 +65,26 @@ pub struct DesktopTask {
     pub completed_at: Option<String>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Collection {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default = "default_collection_kind")]
+    pub kind: String,
+    #[serde(default = "default_collection_status")]
+    pub status: String,
+}
+
+fn default_collection_kind() -> String {
+    "project".to_string()
+}
+
+fn default_collection_status() -> String {
+    "active".to_string()
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct CreateTaskPayload {
     pub title: String,
@@ -402,6 +422,79 @@ async fn center_window(app: AppHandle) -> Result<(), String> {
         let _ = window.center();
     }
     Ok(())
+}
+
+#[tauri::command]
+async fn get_collections(auth: State<'_, AuthManager>) -> Result<Vec<Collection>, String> {
+    let session = auth.current_session().ok_or("Not signed in")?;
+    let config = auth.config();
+    let client = reqwest::Client::new();
+    let url = format!("{}/v1/collections", config.api_url.trim_end_matches('/'));
+    let resp = client
+        .get(&url)
+        .header("authorization", format!("Bearer {}", session.vox_token))
+        .timeout(std::time::Duration::from_millis(5000))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("collections request failed: {}", resp.status()));
+    }
+    resp.json::<Vec<Collection>>().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn create_collection(
+    name: String,
+    description: Option<String>,
+    kind: Option<String>,
+    auth: State<'_, AuthManager>,
+) -> Result<Collection, String> {
+    let session = auth.current_session().ok_or("Not signed in")?;
+    let config = auth.config();
+    let client = reqwest::Client::new();
+    let url = format!("{}/v1/collections", config.api_url.trim_end_matches('/'));
+    let body = serde_json::json!({
+        "name": name,
+        "description": description.unwrap_or_default(),
+        "kind": kind.unwrap_or_else(|| "project".to_string()),
+    });
+    let resp = client
+        .post(&url)
+        .header("authorization", format!("Bearer {}", session.vox_token))
+        .json(&body)
+        .timeout(std::time::Duration::from_millis(5000))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("create collection failed: {}", resp.status()));
+    }
+    resp.json::<Collection>().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn archive_collection(id: String, auth: State<'_, AuthManager>) -> Result<(), String> {
+    let session = auth.current_session().ok_or("Not signed in")?;
+    let config = auth.config();
+    let client = reqwest::Client::new();
+    let url = format!(
+        "{}/v1/collections/{}",
+        config.api_url.trim_end_matches('/'),
+        id
+    );
+    let resp = client
+        .delete(&url)
+        .header("authorization", format!("Bearer {}", session.vox_token))
+        .timeout(std::time::Duration::from_millis(5000))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if resp.status().is_success() || resp.status().as_u16() == 404 {
+        Ok(())
+    } else {
+        Err(format!("archive collection failed: {}", resp.status()))
+    }
 }
 
 #[tauri::command]
@@ -852,6 +945,9 @@ pub fn run() {
             get_tasks,
             create_task,
             update_task,
+            get_collections,
+            create_collection,
+            archive_collection,
             #[cfg(target_os = "macos")]
             macos_location::get_native_location
         ])
