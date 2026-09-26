@@ -87,6 +87,11 @@ impl TerminalManager {
     pub fn run_command(&self, command: &str) -> Result<String, String> {
         let output = {
             let mut guard = self.0.lock().map_err(|e| e.to_string())?;
+            if guard.is_none() {
+                drop(guard);
+                self.open_shell()?;
+                guard = self.0.lock().map_err(|e| e.to_string())?;
+            }
             let session = guard.as_mut().ok_or("no terminal session is open")?;
             if let Ok(mut buf) = session.output.lock() {
                 buf.clear();

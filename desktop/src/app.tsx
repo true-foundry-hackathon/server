@@ -34,6 +34,7 @@ export default function App() {
 
   const {
     auth: authState,
+    authLoading,
     authBusy,
     authError,
     googleSignIn,
@@ -128,6 +129,15 @@ export default function App() {
       ? "Establishing duplex audio link…"
       : "Press the button or hit Return to talk";
 
+  if (authLoading) {
+    return (
+      <main
+        className="relative h-full w-full overflow-hidden bg-void-black"
+        tabIndex={0}
+      />
+    );
+  }
+
   if (!authState.signed_in) {
     return (
       <SignInScreen
@@ -157,6 +167,8 @@ export default function App() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         accountLabel={authState.email ?? authState.user_id ?? "Signed in"}
+        userName={authState.user_name ?? (authState.email ? authState.email.replace(/@.*/, "") : "User")}
+        avatarUrl={authState.avatar_url ?? null}
         onSignOut={() => void signOut()}
         isActive={isActive}
         callState={callState}

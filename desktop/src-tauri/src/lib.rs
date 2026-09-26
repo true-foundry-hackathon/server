@@ -77,7 +77,15 @@ pub fn run() {
         .manage(task_store::TaskManager::new())
         .manage(device_link::DeviceLinkState::default())
         .manage(device_link::RemoteControl::load())
+        .manage(device_link::EventLog::default())
         .manage(SystemStatsState::new())
+        .on_window_event(|window, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .setup(|app| {
             #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
             {
@@ -120,6 +128,7 @@ pub fn run() {
             device_link::get_device_link_status,
             device_link::get_remote_control,
             device_link::set_remote_control,
+            device_link::get_local_events,
             system_stats::get_system_stats,
             #[cfg(target_os = "macos")]
             macos_location::get_native_location
@@ -138,7 +147,13 @@ pub fn run() {
             }
 
             #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Reopen { .. } = event {
+            if let tauri::RunEvent::Reopen { has_visible_windows, .. } = event {
+                if !has_visible_windows {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
                 if let Ok(Some(urls)) = app.deep_link().get_current() {
                     let vox_urls = filter_vox_urls(urls);
                     if !vox_urls.is_empty() {

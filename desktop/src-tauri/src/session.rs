@@ -49,9 +49,11 @@ fn status_from_phase(phase: u8, is_running: bool, mic_level: f32) -> CallStatus 
 
 #[tauri::command]
 pub async fn start_call(
+    app: tauri::AppHandle,
     auth: State<'_, AuthManager>,
     state: State<'_, SessionManager>,
 ) -> Result<CallStatus, String> {
+    crate::device_link::emit_local_event(&app, "status", "Voice call connecting...");
     let session = auth
         .current_session()
         .ok_or_else(|| "Sign in before starting a call".to_string())?;
@@ -105,30 +107,34 @@ pub async fn start_call(
     match ready_rx.await {
         Ok(Ok(())) => {
             phase.store(PHASE_ACTIVE, Ordering::SeqCst);
+            crate::device_link::emit_local_event(&app, "status", "Voice call active — mic listening");
             Ok(status_from_phase(PHASE_ACTIVE, true, 0.0))
         }
         Ok(Err(err)) => {
             let mut session_guard = state.0.lock().map_err(|e| e.to_string())?;
             let _ = session_guard.take();
             phase.store(PHASE_IDLE, Ordering::SeqCst);
+            crate::device_link::emit_local_event(&app, "error", &format!("Call failed to start: {err}"));
             Err(err)
         }
         Err(_) => {
             let mut session_guard = state.0.lock().map_err(|e| e.to_string())?;
             let _ = session_guard.take();
             phase.store(PHASE_IDLE, Ordering::SeqCst);
+            crate::device_link::emit_local_event(&app, "error", "Call failed to start");
             Err("Call failed to start".to_string())
         }
     }
 }
 
 #[tauri::command]
-pub fn end_call(state: State<'_, SessionManager>) -> Result<CallStatus, String> {
+pub fn end_call(app: tauri::AppHandle, state: State<'_, SessionManager>) -> Result<CallStatus, String> {
     let mut session_guard = state.0.lock().map_err(|e| e.to_string())?;
     if let Some(session) = session_guard.take() {
         session.phase.store(PHASE_IDLE, Ordering::SeqCst);
         session.is_running.store(false, Ordering::SeqCst);
         let _ = session.stop_tx.send(());
+        crate::device_link::emit_local_event(&app, "status", "Voice call ended");
     }
     Ok(status_from_phase(PHASE_IDLE, false, 0.0))
 }

@@ -9,6 +9,8 @@ export type AuthState = {
   bridge_url: string;
   api_url: string;
   has_phone: boolean;
+  user_name?: string | null;
+  avatar_url?: string | null;
 };
 
 export type CallStatus = {
@@ -22,10 +24,11 @@ export type DeviceLinkStatus = {
   status: "connected" | "connecting" | "disconnected" | "disabled";
 };
 
-export type SystemStats = {
-  cpu_percent: number;
-  ram_percent: number;
-  battery_percent: number | null;
+export type LocalEvent = {
+  id: string;
+  timestamp: string;
+  kind: "system" | "command" | "output" | "status" | "success" | "error";
+  text: string;
 };
 
 export type DesktopTask = {
@@ -115,7 +118,7 @@ export const api = {
     invoke<DeviceLinkStatus>("get_device_link_status"),
   setRemoteControl: (enabled: boolean) =>
     invoke<boolean>("set_remote_control", { enabled }),
-  getSystemStats: () => invoke<SystemStats>("get_system_stats"),
+  getLocalEvents: () => invoke<LocalEvent[]>("get_local_events"),
 };
 
 export const windowControls = {

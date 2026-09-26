@@ -5,6 +5,10 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { VoxLogo } from "@/components/vox-logo";
 
+// E.164: a leading "+", then 7-15 digits, first digit non-zero.
+// Matches what Twilio reports for an inbound call's caller id.
+const E164_REGEX = /^\+[1-9]\d{6,14}$/;
+
 export function PhoneEntryScreen({
   busy,
   error,
@@ -15,6 +19,8 @@ export function PhoneEntryScreen({
   onSubmit: (phoneNumber: string) => void;
 }) {
   const [phoneNumber, setPhoneNumber] = useState("");
+  const normalized = phoneNumber.replace(/[\s()-]/g, "");
+  const isValid = E164_REGEX.test(normalized);
 
   return (
     <main
@@ -57,7 +63,7 @@ export function PhoneEntryScreen({
               className="flex flex-col gap-3"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (phoneNumber.trim()) onSubmit(phoneNumber.trim());
+                if (isValid) onSubmit(normalized);
               }}
             >
               <Input
@@ -70,13 +76,17 @@ export function PhoneEntryScreen({
               <Button
                 type="submit"
                 className="shadow-btn-lift h-11 w-full"
-                disabled={busy || !phoneNumber.trim()}
+                disabled={busy || !isValid}
               >
                 {busy ? "Saving…" : "Continue"}
               </Button>
               {error ? (
                 <p className="text-center text-xs text-coral-pulse">
                   {error}
+                </p>
+              ) : phoneNumber.trim() && !isValid ? (
+                <p className="text-center text-xs text-ash">
+                  Include the country code with a leading +, e.g. +15550001234
                 </p>
               ) : null}
             </form>

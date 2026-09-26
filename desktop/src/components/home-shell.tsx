@@ -1,24 +1,24 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { AppSidebar } from "@/components/shell/app-sidebar";
 import { AgentPane } from "@/components/shell/agent-pane";
-import { IconTray } from "@/components/shell/icon-tray";
+import { ActivityLogs } from "@/components/activity-logs";
 import { PlaceholderPane } from "@/components/shell/placeholder-pane";
 import { SHELL_TABS, type ShellTab } from "@/components/shell/shell-tabs";
-import { ShellHeader } from "@/components/shell/shell-header";
 import { MapAmbientChrome } from "@/components/map-ambient-chrome";
 import type { NewProjectForm } from "@/components/new-project-dialog";
 import { ProjectDetailView } from "@/components/project-detail-view";
 import { ProjectsView } from "@/components/projects-view";
-import { SystemMonitorWidget } from "@/components/system-monitor-widget";
 import { TasksView } from "@/components/tasks-view";
 import { useMissionMap } from "@/hooks/use-mission-map";
 import type { Collection, DesktopTask } from "@/lib/tauri";
-import { cn } from "@/lib/utils";
-import { WIDGET_GLASS, WIDGET_RADIUS } from "@/lib/widget-style";
 
 export function HomeShell({
   activeTab,
   onTabChange,
   accountLabel,
+  userName,
+  avatarUrl,
   onSignOut,
   isActive,
   callState,
@@ -52,6 +52,8 @@ export function HomeShell({
   activeTab: ShellTab;
   onTabChange: (tab: ShellTab) => void;
   accountLabel: string;
+  userName?: string | null;
+  avatarUrl?: string | null;
   onSignOut: () => void;
   isActive: boolean;
   callState: string;
@@ -82,8 +84,22 @@ export function HomeShell({
   onCreateProject: (form: NewProjectForm) => Promise<void>;
   onArchiveProject: (id: string) => void;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
   const { mapNode, mapReady, mapError } = useMissionMap();
+
+  const handleMainDragMouseDown = (e: React.MouseEvent) => {
+    if (
+      e.button === 0 &&
+      !(e.target as HTMLElement).closest("button, a, input, select, textarea, [data-no-drag]")
+    ) {
+      void getCurrentWindow().startDragging();
+    }
+  };
+
+  const handleMainDoubleClick = (e: React.MouseEvent) => {
+    if (!(e.target as HTMLElement).closest("button, a, input, select, textarea, [data-no-drag]")) {
+      void getCurrentWindow().toggleMaximize();
+    }
+  };
 
   let body: ReactNode;
   if (activeTab === "agent") {
@@ -150,43 +166,56 @@ export function HomeShell({
 
   return (
     <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#0b0c0e]">
+      {/* 3D Map in background */}
       <div
         ref={mapNode}
         className="vox-map-host absolute inset-0"
         style={{ background: "#0b0c0e" }}
       />
+
       <MapAmbientChrome />
 
-      <div className="no-drag pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col p-3.5">
-        <div className="pointer-events-auto">
-          <ShellHeader
-            collapsed={collapsed}
-            onToggleCollapsed={() => setCollapsed((v) => !v)}
-            accountLabel={accountLabel}
-            onSignOut={onSignOut}
-          />
-        </div>
-        {!collapsed ? (
-          <div
-            className={cn(
-              "pointer-events-auto relative mt-2.5 flex h-[380px] overflow-hidden",
-              WIDGET_GLASS,
-              WIDGET_RADIUS,
-            )}
-          >
-            <IconTray
-              activeTab={activeTab}
-              onTabChange={onTabChange}
-              pendingCount={pendingCount}
-            />
-            <div className="flex min-h-0 flex-1 flex-col border-l border-white/10">
-              {body}
-            </div>
-          </div>
-        ) : null}
-      </div>
+      {/* Live transparent activity logs on the top right */}
+      <ActivityLogs />
 
-      <SystemMonitorWidget />
+      {/* Foreground layout: Sidebar on the left + Main stage over the map */}
+      <div className="pointer-events-none absolute inset-0 z-20 flex overflow-hidden">
+        <AppSidebar
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          pendingCount={pendingCount}
+          tasks={tasks}
+          accountLabel={accountLabel}
+          userName={userName}
+          avatarUrl={avatarUrl}
+          onSignOut={onSignOut}
+          onNewTask={onNewTask}
+          onInspectTask={onInspectTask}
+        />
+
+        <div className="pointer-events-none relative flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+          {/* Top window drag region across the rest of the window */}
+          <div
+            data-tauri-drag-region
+            onMouseDown={handleMainDragMouseDown}
+            onDoubleClick={handleMainDoubleClick}
+            className="pointer-events-auto h-10 w-full shrink-0 select-none"
+          />
+
+          {/* Main Stage over Map */}
+          <div className="pointer-events-none relative flex min-h-0 flex-1 flex-col overflow-hidden p-4 pt-0">
+            {activeTab === "agent" ? (
+              <div className="pointer-events-none flex h-full w-full flex-col">
+                {body}
+              </div>
+            ) : (
+              <div className="pointer-events-auto flex h-full w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#07080a]/80 shadow-2xl backdrop-blur-md">
+                {body}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {!mapReady && !mapError ? (
         <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center">

@@ -1,41 +1,9 @@
-import { Mic, MicOff } from "lucide-react";
+import { VoxLogo, type VoxOrbVisualState } from "@/components/vox-logo";
 import { cn } from "@/lib/utils";
 
 export function AgentPane({
   isActive,
   callState,
-  label,
-  subLabel,
-  callError,
-  onToggleCall,
-}: {
-  isActive: boolean;
-  callState: string;
-  label: string;
-  subLabel: string;
-  callError: string;
-  onToggleCall: () => void;
-}) {
-  return (
-    <div className="flex min-h-0 flex-1">
-      <TalkPane
-        isActive={isActive}
-        callState={callState}
-        label={label}
-        subLabel={subLabel}
-        callError={callError}
-        onToggleCall={onToggleCall}
-      />
-      <ActivityLogPane />
-    </div>
-  );
-}
-
-function TalkPane({
-  isActive,
-  callState,
-  label,
-  subLabel,
   callError,
   onToggleCall,
 }: {
@@ -47,56 +15,44 @@ function TalkPane({
   onToggleCall: () => void;
 }) {
   const connecting = callState === "connecting";
-  const expanded = isActive || connecting;
-  const status = callError || (expanded ? label : subLabel);
+  const orbState: VoxOrbVisualState = callError
+    ? "error"
+    : isActive
+      ? "active"
+      : connecting
+        ? "connecting"
+        : "idle";
+
+  const buttonText = callError
+    ? "Error connecting"
+    : isActive
+      ? "End call"
+      : connecting
+        ? "Connecting…"
+        : "Talk to Vox";
 
   return (
-    <button
-      type="button"
-      onClick={onToggleCall}
-      title={isActive ? "End call" : "Talk to Vox"}
-      className="pointer-events-auto flex w-[70%] flex-col items-center justify-center gap-2 overflow-hidden p-4 text-center transition"
-    >
-      <span
+    <div className="pointer-events-none flex h-full w-full flex-col items-center justify-end pb-8">
+      <button
+        type="button"
+        onClick={onToggleCall}
         className={cn(
-          "flex size-14 items-center justify-center rounded-full transition",
+          "pointer-events-auto group relative flex items-center gap-2.5 rounded-full border px-5 py-2.5 shadow-2xl backdrop-blur-xl transition active:scale-95",
           isActive
-            ? "bg-ember-hush text-coral-pulse"
-            : "bg-white/8 text-pure-white",
+            ? "border-coral-pulse/40 bg-[#160d0f]/90 text-coral-pulse shadow-[0_0_24px_rgba(255,99,99,0.25)] hover:bg-[#1a0f12]"
+            : "border-white/15 bg-[#0a0b0e]/85 text-pure-white hover:border-white/30 hover:bg-[#121318]/95 shadow-[0_8px_30px_rgba(0,0,0,0.6)]",
         )}
       >
-        {isActive || connecting ? (
-          <MicOff className="size-6" />
-        ) : (
-          <Mic className="size-6" />
-        )}
-      </span>
-      <span className="text-[14px] font-medium text-pure-white">
-        Talk to Vox
-      </span>
-      {status ? (
-        <span
-          className={cn(
-            "line-clamp-2 max-w-[85%] text-[11px] leading-snug",
-            callError ? "text-coral-pulse" : "text-white/50",
-          )}
-        >
-          {status}
+        <VoxLogo
+          animated
+          size={20}
+          state={orbState}
+          className="shrink-0"
+        />
+        <span className="text-[13px] font-medium tracking-wide">
+          {buttonText}
         </span>
-      ) : null}
-    </button>
-  );
-}
-
-function ActivityLogPane() {
-  return (
-    <div className="flex w-[30%] shrink-0 flex-col border-l border-white/10 p-4">
-      <span className="text-[10.5px] font-medium uppercase tracking-wide text-white/45">
-        Activity
-      </span>
-      <p className="mt-2 text-[11px] text-white/40">
-        Agent activity — coming soon
-      </p>
+      </button>
     </div>
   );
 }

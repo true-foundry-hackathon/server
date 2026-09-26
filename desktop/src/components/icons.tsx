@@ -1,26 +1,3 @@
-export function CoralDiamond({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      width="12"
-      height="12"
-      viewBox="0 0 10 10"
-      fill="none"
-      aria-hidden
-    >
-      <rect
-        x="5"
-        y="0.5"
-        width="6"
-        height="6"
-        rx="1"
-        transform="rotate(45 5 0.5)"
-        fill="#ff6363"
-      />
-    </svg>
-  );
-}
-
 export function GoogleIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>

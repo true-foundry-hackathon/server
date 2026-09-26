@@ -16,6 +16,10 @@ pub struct StoredSession {
     pub expires_at: Option<String>,
     #[serde(default)]
     pub has_phone: bool,
+    #[serde(default)]
+    pub user_name: Option<String>,
+    #[serde(default)]
+    pub avatar_url: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -95,29 +99,78 @@ pub fn clear_pending_oauth() -> Result<(), String> {
     }
 }
 
+fn session_file() -> PathBuf {
+    let base = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+    base.join("Library/Application Support")
+        .join(SERVICE)
+        .join("session.json")
+}
+
 pub fn save_session(session: &StoredSession) -> Result<(), String> {
     let payload = serde_json::to_string(session).map_err(|e| e.to_string())?;
-    entry()?
-        .set_password(&payload)
-        .map_err(|e| format!("Could not store session securely: {e}"))
+
+    // Dual-write: file + keychain. File survives keychain flakiness (unsigned
+    // binaries, ACL changes across builds, sandbox restrictions) while keychain
+    // provides OS-level credential storage when available.
+    let path = session_file();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Could not create session dir: {e}"))?;
+    }
+    std::fs::write(&path, &payload)
+        .map_err(|e| format!("Could not store session file: {e}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+    }
+
+    if let Ok(entry) = entry() {
+        if let Err(e) = entry.set_password(&payload) {
+            eprintln!("keychain session write warning: {e}");
+        }
+    }
+    Ok(())
 }
 
 pub fn load_session() -> Result<Option<StoredSession>, String> {
-    match entry()?.get_password() {
+    if let Ok(entry) = entry() {
+        match entry.get_password() {
+            Ok(payload) => {
+                match serde_json::from_str::<StoredSession>(&payload) {
+                    Ok(session) => return Ok(Some(session)),
+                    Err(e) => eprintln!("keychain session corrupt: {e}"),
+                }
+            }
+            Err(keyring::Error::NoEntry) => {}
+            Err(e) => eprintln!("keychain session read warning: {e}"),
+        }
+    }
+
+    let path = session_file();
+    match std::fs::read_to_string(&path) {
         Ok(payload) => {
             let session = serde_json::from_str(&payload)
-                .map_err(|e| format!("Stored session is corrupt: {e}"))?;
+                .map_err(|e| format!("Stored session file is corrupt: {e}"))?;
             Ok(Some(session))
         }
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(format!("Could not read stored session: {e}")),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("Could not read session file: {e}")),
     }
 }
 
 pub fn clear_session() -> Result<(), String> {
-    match entry()?.delete_credential() {
-        Ok(()) => Ok(()),
-        Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(format!("Could not clear stored session: {e}")),
+    let _ = std::fs::remove_file(session_file());
+    if let Ok(entry) = entry() {
+        match entry.delete_credential() {
+            Ok(()) => Ok(()),
+            Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(format!("Could not clear stored session: {e}")),
+        }
+    } else {
+        Ok(())
     }
 }
+

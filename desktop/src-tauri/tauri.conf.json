@@ -35,7 +35,7 @@
         "child-src": "'self' blob:",
         "style-src": "'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src": "'self' data: https://fonts.gstatic.com",
-        "img-src": "'self' data: blob: https://tiles.openfreemap.org",
+        "img-src": "'self' data: blob: https: http: https://tiles.openfreemap.org",
         "connect-src": "'self' ipc: http://ipc.localhost https://tiles.openfreemap.org https://ipapi.co https://nominatim.openstreetmap.org",
         "object-src": "'none'",
         "base-uri": "'self'"
@@ -47,7 +47,7 @@
         "child-src": "'self' blob:",
         "style-src": "'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src": "'self' data: https://fonts.gstatic.com",
-        "img-src": "'self' data: blob: https://tiles.openfreemap.org",
+        "img-src": "'self' data: blob: https: http: https://tiles.openfreemap.org",
         "connect-src": "'self' ipc: http://ipc.localhost https://tiles.openfreemap.org https://ipapi.co https://nominatim.openstreetmap.org http://localhost:1420 ws://localhost:1420",
         "object-src": "'none'",
         "base-uri": "'self'"

@@ -13,10 +13,13 @@ const emptyAuth: AuthState = {
   bridge_url: "",
   api_url: "",
   has_phone: false,
+  user_name: null,
+  avatar_url: null,
 };
 
 export function useAuth() {
   const [auth, setAuth] = useState<AuthState>(emptyAuth);
+  const [authLoading, setAuthLoading] = useState(true);
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState("");
 
@@ -24,11 +27,30 @@ export function useAuth() {
     void api.centerWindow().catch(() => undefined);
   }, []);
 
+  // Check auth state immediately on startup
   useEffect(() => {
+    let active = true;
+    void api
+      .getAuthState()
+      .then((initial) => {
+        if (!active) return;
+        setAuth(initial);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setAuthLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (authLoading) return;
     if (auth.signed_in)
       void animateWindowSize(1290, 800).catch(() => undefined);
     else void animateWindowSize(800, 600).catch(() => undefined);
-  }, [auth.signed_in]);
+  }, [auth.signed_in, authLoading]);
 
   useEffect(() => {
     if (auth.signed_in) return;
@@ -83,5 +105,5 @@ export function useAuth() {
     }
   }
 
-  return { auth, authBusy, authError, googleSignIn, signOut, linkPhone };
+  return { auth, authLoading, authBusy, authError, googleSignIn, signOut, linkPhone };
 }

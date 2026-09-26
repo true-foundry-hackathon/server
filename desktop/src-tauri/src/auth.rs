@@ -31,6 +31,8 @@ pub struct AuthState {
     pub bridge_url: String,
     pub api_url: String,
     pub has_phone: bool,
+    pub user_name: Option<String>,
+    pub avatar_url: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -46,6 +48,81 @@ struct SupabaseTokenResponse {
 struct SupabaseUser {
     id: String,
     email: Option<String>,
+    #[serde(default)]
+    user_metadata: Option<serde_json::Value>,
+}
+
+fn parse_user_metadata_val(meta: Option<&serde_json::Value>) -> (Option<String>, Option<String>) {
+    let Some(meta) = meta else { return (None, None); };
+    let user_name = meta
+        .get("full_name")
+        .or_else(|| meta.get("name"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let avatar_url = meta
+        .get("avatar_url")
+        .or_else(|| meta.get("picture"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    (user_name, avatar_url)
+}
+
+fn extract_metadata_from_jwt(token: &str) -> (Option<String>, Option<String>) {
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() < 2 {
+        return (None, None);
+    }
+    let payload_b64 = parts[1];
+    let padded = match payload_b64.len() % 4 {
+        2 => format!("{}==", payload_b64),
+        3 => format!("{}=", payload_b64),
+        _ => payload_b64.to_string(),
+    };
+
+    use base64::engine::general_purpose::{STANDARD, URL_SAFE, URL_SAFE_NO_PAD};
+    use base64::Engine;
+
+    let decoded = URL_SAFE_NO_PAD
+        .decode(payload_b64)
+        .or_else(|_| URL_SAFE.decode(&padded))
+        .or_else(|_| STANDARD.decode(&padded));
+
+    if let Ok(bytes) = decoded {
+        if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+            let (mut name, mut avatar) = parse_user_metadata_val(val.get("user_metadata"));
+            if name.is_none() {
+                name = val
+                    .get("full_name")
+                    .or_else(|| val.get("name"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+            }
+            if avatar.is_none() {
+                avatar = val
+                    .get("avatar_url")
+                    .or_else(|| val.get("picture"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+            }
+            if name.is_none() || avatar.is_none() {
+                if let Some(identities) = val.get("identities").and_then(|i| i.as_array()) {
+                    for id in identities {
+                        if let Some(id_data) = id.get("identity_data") {
+                            let (id_name, id_avatar) = parse_user_metadata_val(Some(id_data));
+                            if name.is_none() {
+                                name = id_name;
+                            }
+                            if avatar.is_none() {
+                                avatar = id_avatar;
+                            }
+                        }
+                    }
+                }
+            }
+            return (name, avatar);
+        }
+    }
+    (None, None)
 }
 
 #[derive(Deserialize)]
@@ -79,7 +156,13 @@ pub struct AuthManager {
 impl AuthManager {
     pub fn new() -> Result<Self, String> {
         let config = PublicConfig::load()?;
-        let session = load_session().ok().flatten();
+        let session = match load_session() {
+            Ok(s) => s,
+            Err(err) => {
+                eprintln!("Warning: failed to load session on startup: {err}");
+                None
+            }
+        };
         Ok(Self {
             config,
             session: Mutex::new(session),
@@ -92,6 +175,24 @@ impl AuthManager {
     pub fn state(&self) -> AuthState {
         self.pull_session_from_store();
         let session = self.session.lock().ok().and_then(|guard| guard.clone());
+        let (user_name, avatar_url) = session
+            .as_ref()
+            .map(|s| {
+                let mut name = s.user_name.clone();
+                let mut avatar = s.avatar_url.clone();
+                if name.is_none() || avatar.is_none() {
+                    let (jwt_name, jwt_avatar) = extract_metadata_from_jwt(&s.access_token);
+                    if name.is_none() {
+                        name = jwt_name;
+                    }
+                    if avatar.is_none() {
+                        avatar = jwt_avatar;
+                    }
+                }
+                (name, avatar)
+            })
+            .unwrap_or((None, None));
+
         AuthState {
             signed_in: session.is_some(),
             user_id: session.as_ref().map(|s| s.user_id.clone()),
@@ -99,6 +200,8 @@ impl AuthManager {
             bridge_url: self.config.bridge_url.clone(),
             api_url: self.config.api_url.clone(),
             has_phone: session.as_ref().map(|s| s.has_phone).unwrap_or(false),
+            user_name,
+            avatar_url,
         }
     }
 
@@ -118,8 +221,14 @@ impl AuthManager {
         if guard.is_some() {
             return;
         }
-        if let Ok(Some(session)) = load_session() {
-            *guard = Some(session);
+        match load_session() {
+            Ok(Some(session)) => {
+                *guard = Some(session);
+            }
+            Ok(None) => {}
+            Err(err) => {
+                eprintln!("Warning: pull_session_from_store failed: {err}");
+            }
         }
     }
 
@@ -425,13 +534,27 @@ impl AuthManager {
     }
 
     async fn establish_session(&self, tokens: SupabaseTokenResponse) -> Result<AuthState, String> {
-        let (user_id, email) = match tokens.user {
-            Some(user) => (user.id, user.email),
+        let (user_id, email, mut user_name, mut avatar_url) = match tokens.user {
+            Some(user) => {
+                let (name, avatar) = parse_user_metadata_val(user.user_metadata.as_ref());
+                (user.id, user.email, name, avatar)
+            }
             None => {
                 let me = fetch_supabase_user(&self.config, &tokens.access_token).await?;
-                (me.id, me.email)
+                let (name, avatar) = parse_user_metadata_val(me.user_metadata.as_ref());
+                (me.id, me.email, name, avatar)
             }
         };
+
+        if user_name.is_none() || avatar_url.is_none() {
+            let (jwt_name, jwt_avatar) = extract_metadata_from_jwt(&tokens.access_token);
+            if user_name.is_none() {
+                user_name = jwt_name;
+            }
+            if avatar_url.is_none() {
+                avatar_url = jwt_avatar;
+            }
+        }
 
         let exchange = exchange_with_core(&self.config, &tokens.access_token).await?;
 
@@ -443,6 +566,8 @@ impl AuthManager {
             vox_token: exchange.token,
             expires_at: Some(exchange.expires_at),
             has_phone: exchange.has_phone,
+            user_name,
+            avatar_url,
         };
 
         save_session(&session)?;

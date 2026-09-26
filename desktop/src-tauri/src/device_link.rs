@@ -1,8 +1,7 @@
 /**
 * Device self-registration and the persistent real-time connection to Vox
 * Core, used to receive live terminal commands during a phone call.
-*
-* Remote control is opt-in: it stays off until the user turns it on in the
+*\n* Remote control is opt-in: it stays off until the user turns it on in the
 * app, and while off this Mac never opens the socket, so the agent cannot
 * reach it. Every command received is appended to a local log.
 */
@@ -14,7 +13,7 @@ use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Duration;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::watch;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -45,6 +44,58 @@ fn link_status_str(phase: u8) -> &'static str {
         LINK_DISABLED => "disabled",
         _ => "disconnected",
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalEvent {
+    pub id: String,
+    pub timestamp: String,
+    pub kind: String, // "system" | "command" | "output" | "status" | "success" | "error"
+    pub text: String,
+}
+
+#[derive(Default, Clone)]
+pub struct EventLog(pub std::sync::Arc<std::sync::Mutex<Vec<LocalEvent>>>);
+
+pub fn emit_local_event(app: &AppHandle, kind: &str, text: &str) {
+    let now = chrono::Local::now().format("%H:%M:%S").to_string();
+    let event = LocalEvent {
+        id: uuid::Uuid::new_v4().to_string(),
+        timestamp: now,
+        kind: kind.to_string(),
+        text: text.to_string(),
+    };
+    if let Some(state) = app.try_state::<EventLog>() {
+        if let Ok(mut buf) = state.0.lock() {
+            buf.push(event.clone());
+            if buf.len() > 300 {
+                buf.remove(0);
+            }
+        }
+    }
+    let _ = app.emit("local-agent-event", &event);
+}
+
+#[tauri::command]
+pub fn get_local_events(state: State<'_, EventLog>) -> Vec<LocalEvent> {
+    let mut events = state.0.lock().map(|g| g.clone()).unwrap_or_default();
+    if events.is_empty() {
+        let log_path = vox_config_dir().join("remote-commands.log");
+        if let Ok(content) = std::fs::read_to_string(&log_path) {
+            for line in content.lines().rev().take(20).collect::<Vec<_>>().into_iter().rev() {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    events.push(LocalEvent {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                        kind: "command".to_string(),
+                        text: trimmed.to_string(),
+                    });
+                }
+            }
+        }
+    }
+    events
 }
 
 #[tauri::command]
@@ -192,18 +243,28 @@ fn socket_url(api_url: &str, device_id: &str) -> String {
     format!("{base}/v1/devices/{device_id}/socket")
 }
 
-async fn handle_frame(terminal: &TerminalManager, frame: Value) -> Value {
+async fn handle_frame(app: &AppHandle, terminal: &TerminalManager, frame: Value) -> Value {
     let id = frame.get("id").cloned().unwrap_or(Value::Null);
     let kind = frame.get("type").and_then(Value::as_str).unwrap_or("");
 
     match kind {
         "open_shell" => {
+            emit_local_event(app, "system", "Vox requested interactive terminal shell");
             let terminal = terminal.clone();
             let result = tokio::task::spawn_blocking(move || terminal.open_shell()).await;
             match result {
-                Ok(Ok(())) => json!({ "id": id, "ok": true }),
-                Ok(Err(err)) => json!({ "id": id, "ok": false, "error": err }),
-                Err(err) => json!({ "id": id, "ok": false, "error": err.to_string() }),
+                Ok(Ok(())) => {
+                    emit_local_event(app, "status", "Terminal session ready on MacBook");
+                    json!({ "id": id, "ok": true })
+                }
+                Ok(Err(err)) => {
+                    emit_local_event(app, "error", &format!("Failed to open shell: {err}"));
+                    json!({ "id": id, "ok": false, "error": err })
+                }
+                Err(err) => {
+                    emit_local_event(app, "error", &format!("Shell spawn error: {err}"));
+                    json!({ "id": id, "ok": false, "error": err.to_string() })
+                }
             }
         }
         "run_command" => {
@@ -212,13 +273,31 @@ async fn handle_frame(terminal: &TerminalManager, frame: Value) -> Value {
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_string();
+            emit_local_event(app, "command", &format!("$ {command}"));
+            emit_local_event(app, "system", "Executing on MacBook...");
             let terminal = terminal.clone();
             let logged = command.clone();
+            let app_clone = app.clone();
             let result = tokio::task::spawn_blocking(move || terminal.run_command(&command)).await;
             let response = match result {
-                Ok(Ok(output)) => json!({ "id": id, "ok": true, "output": output }),
-                Ok(Err(err)) => json!({ "id": id, "ok": false, "error": err }),
-                Err(err) => json!({ "id": id, "ok": false, "error": err.to_string() }),
+                Ok(Ok(output)) => {
+                    for line in output.lines() {
+                        let trimmed = line.trim_end();
+                        if !trimmed.is_empty() {
+                            emit_local_event(&app_clone, "output", trimmed);
+                        }
+                    }
+                    emit_local_event(&app_clone, "success", "Vox reading command output");
+                    json!({ "id": id, "ok": true, "output": output })
+                }
+                Ok(Err(err)) => {
+                    emit_local_event(&app_clone, "error", &format!("Command failed: {err}"));
+                    json!({ "id": id, "ok": false, "error": err })
+                }
+                Err(err) => {
+                    emit_local_event(&app_clone, "error", &format!("Execution error: {err}"));
+                    json!({ "id": id, "ok": false, "error": err.to_string() })
+                }
             };
             let outcome = if response["ok"] == true { "ran" } else { "failed" };
             log_remote_command(&logged, outcome);
@@ -229,6 +308,7 @@ async fn handle_frame(terminal: &TerminalManager, frame: Value) -> Value {
 }
 
 async fn connect_and_serve(
+    app: &AppHandle,
     api_url: &str,
     vox_token: &str,
     device_id: &str,
@@ -236,6 +316,7 @@ async fn connect_and_serve(
     link: &DeviceLinkState,
     consent: &mut watch::Receiver<bool>,
 ) -> Result<(), String> {
+    emit_local_event(app, "system", "Connecting to Vox Core bridge...");
     let url = socket_url(api_url, device_id);
     let mut request = url
         .into_client_request()
@@ -248,6 +329,7 @@ async fn connect_and_serve(
         .await
         .map_err(|e| format!("device socket connect failed: {e}"))?;
     link.0.store(LINK_CONNECTED, Ordering::SeqCst);
+    emit_local_event(app, "status", "Device bridge connected — remote control ready");
     let (mut sender, mut receiver) = ws_stream.split();
 
     loop {
@@ -256,6 +338,7 @@ async fn connect_and_serve(
             // Turning remote control off closes the link immediately.
             _ = async { consent.wait_for(|enabled| !enabled).await.map(drop) } => {
                 let _ = sender.close().await;
+                emit_local_event(app, "status", "Remote control disabled by user");
                 return Ok(());
             }
         };
@@ -267,7 +350,7 @@ async fn connect_and_serve(
         let Ok(frame) = serde_json::from_str::<Value>(&text) else {
             continue;
         };
-        let response = handle_frame(terminal, frame).await;
+        let response = handle_frame(app, terminal, frame).await;
         if sender
             .send(Message::Text(response.to_string().into()))
             .await
@@ -277,6 +360,7 @@ async fn connect_and_serve(
         }
     }
 
+    emit_local_event(app, "status", "Device bridge socket disconnected");
     Ok(())
 }
 
@@ -309,6 +393,7 @@ pub async fn run_supervisor(app: AppHandle) {
             link.0.store(LINK_DISABLED, Ordering::SeqCst);
             // Tell Core consent is withdrawn, then wait for it to be granted.
             let _ = register_device(&api_url, &session.vox_token, &device_identifier, false).await;
+            emit_local_event(&app, "status", "Remote control currently disabled");
             let _ = consent.wait_for(|enabled| *enabled).await;
             continue;
         }
@@ -326,6 +411,7 @@ pub async fn run_supervisor(app: AppHandle) {
             };
 
         if let Err(err) = connect_and_serve(
+            &app,
             &api_url,
             &session.vox_token,
             &device_id,
