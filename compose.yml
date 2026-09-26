@@ -1,4 +1,4 @@
-name: vox-unified
+name: vox-railway
 
 services:
   redis:

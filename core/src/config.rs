@@ -1,3 +1,6 @@
+/**
+* Application configuration and environment variable loading for Vox Core.
+*/
 #[derive(Clone, Debug)]
 pub struct Config {
     pub bind_address: String,
@@ -47,7 +50,9 @@ impl Config {
         let truefoundry_model = get("TRUEFOUNDRY_MODEL").filter(|value| !value.trim().is_empty());
 
         if let Some(ref url) = truefoundry_gateway_url {
-            std::env::set_var("GEMINI_API_BASE_URL", url);
+            unsafe {
+                std::env::set_var("GEMINI_API_BASE_URL", url);
+            }
         }
 
         let gemini_api_key = get("GEMINI_API_KEY")
