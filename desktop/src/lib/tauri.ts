@@ -18,7 +18,13 @@ export type CallStatus = {
 };
 
 export type DeviceLinkStatus = {
-  status: "connected" | "connecting" | "disconnected";
+  status: "connected" | "connecting" | "disconnected" | "disabled";
+};
+
+export type SystemStats = {
+  cpu_percent: number;
+  ram_percent: number;
+  battery_percent: number | null;
 };
 
 export type DesktopTask = {
@@ -104,6 +110,9 @@ export const api = {
   archiveCollection: (id: string) => invoke<void>("archive_collection", { id }),
   deviceLinkStatus: () =>
     invoke<DeviceLinkStatus>("get_device_link_status"),
+  setRemoteControl: (enabled: boolean) =>
+    invoke<boolean>("set_remote_control", { enabled }),
+  getSystemStats: () => invoke<SystemStats>("get_system_stats"),
 };
 
 export const windowControls = {
