@@ -17,22 +17,6 @@ import sys
 import urllib.request
 import urllib.error
 
-DEFAULT_SECRET_KEYS = [
-    "VOX_AUTH_TOKEN",
-    "DATABASE_URL",
-    "GEMINI_API_KEY",
-    "GEMINI_MODEL",
-    "EXA_API_KEY",
-    "GOOGLE_MAPS_API_KEY",
-    "TWILIO_ACCOUNT_SID",
-    "TWILIO_AUTH_TOKEN",
-    "TWILIO_FROM_NUMBER",
-    "ASSEMBLYAI_API_KEY",
-    "SARVAM_API_KEY",
-    "VOX_STT_PROVIDER",
-    "VOX_TTS_PROVIDER",
-]
-
 RAILWAY_GRAPHQL_URL = "https://backboard.railway.com/graphql/v2"
 
 
@@ -131,6 +115,20 @@ def resolve_railway_environment(token: str, project_id: str, requested_env: str 
     return environments[0]["id"], environments[0]["name"]
 
 
+def list_gsm_secrets(gcp_project: str) -> list[str]:
+    """Dynamically list all secret names in the Google Secret Manager project."""
+    cmd = [
+        "gcloud",
+        "secrets",
+        "list",
+        f"--project={gcp_project}",
+        "--format=value(name)",
+    ]
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+    secrets = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return secrets
+
+
 def fetch_gsm_secret(gcp_project: str, secret_name: str) -> str | None:
     try:
         cmd = [
@@ -216,7 +214,17 @@ def main():
     print(f"Target Environment: '{env_name}' (ID: {env_id})")
 
     custom_keys_env = os.environ.get("SECRET_KEYS")
-    keys_to_fetch = [k.strip() for k in custom_keys_env.split(",") if k.strip()] if custom_keys_env else DEFAULT_SECRET_KEYS
+    if custom_keys_env and custom_keys_env.strip():
+        keys_to_fetch = [k.strip() for k in custom_keys_env.split(",") if k.strip()]
+        print(f"Using explicitly specified keys list ({len(keys_to_fetch)} keys).")
+    else:
+        print("Discovering all secrets in Google Secret Manager...")
+        try:
+            keys_to_fetch = list_gsm_secrets(gcp_project)
+            print(f"Found {len(keys_to_fetch)} secret(s) in GSM.")
+        except Exception as e:
+            print(f"Failed to list secrets dynamically: {e}")
+            sys.exit(1)
 
     collected_secrets = {}
     print(f"\nFetching secrets from Google Secret Manager (Project: {gcp_project})...")
@@ -232,7 +240,7 @@ def main():
                 collected_secrets[key] = val
                 print(f"  ✓ Fetched {kebab_key} -> {key}")
             else:
-                print(f"  - Skipped {key} (not found in GSM)")
+                print(f"  - Skipped {key} (failed to read)")
 
     if not collected_secrets:
         print("No secrets found to sync.")
