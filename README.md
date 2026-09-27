@@ -98,10 +98,22 @@ Point your Twilio/WhatsApp webhook URLs at the custom domain on `caddy` (e.g. `h
 In the GitHub repository settings (`Settings → Secrets and variables → Actions`), add:
 
 - `RAILWAY_TOKEN`: Railway Project Token or Account API token (generate in Railway Settings → Tokens).
+- `RAILWAY_PROJECT_ID`: Railway Project ID (from Railway URL, required for GSM sync).
+- `GCP_PROJECT_ID`: Google Cloud Project ID hosting Google Secret Manager.
+- `GCP_SA_KEY`: Service Account key JSON with `Secret Manager Secret Accessor` role.
 - `RAILWAY_SERVICE_CORE_API`: (optional, defaults to `core-api`)
 - `RAILWAY_SERVICE_CORE_WORKER`: (optional, defaults to `core-worker`)
 - `RAILWAY_SERVICE_BRIDGE`: (optional, defaults to `bridge`)
 - `RAILWAY_SERVICE_CADDY`: (optional, defaults to `caddy`)
+
+### 4. Sync Secrets from Google Secret Manager (GSM)
+
+A workflow `.github/workflows/sync-secrets.yml` and script `scripts/sync-gsm-railway.py` are provided to pull secrets from GSM and populate them as Railway Project Shared Variables (using Railway's GraphQL API).
+
+To sync:
+1. Ensure the GitHub Secrets above are configured.
+2. In GitHub, go to **Actions** → **Sync Secrets from GSM to Railway** → **Run workflow**.
+3. All matched secrets in GSM (e.g. `DATABASE_URL`, `VOX_AUTH_TOKEN`, `GEMINI_API_KEY`, `TWILIO_*`, etc.) will be automatically upserted into Railway's shared variables for your production environment.
 
 ### 4. Deployment Trigger
 
