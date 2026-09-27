@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/li
 
 COPY Cargo.toml Cargo.lock ./
 COPY vox-connections ./vox-connections
-COPY vox-sms-schema ./vox-sms-schema
+COPY vox-shared ./vox-shared
 COPY migrations ./migrations
 COPY contracts ./contracts
 COPY services ./services

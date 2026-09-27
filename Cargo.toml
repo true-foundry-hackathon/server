@@ -2,7 +2,7 @@
 members = [
     "core",
     "core/vox-connections",
-    "core/vox-sms-schema",
+    "core/vox-shared",
     "bridge",
 ]
 resolver = "2"

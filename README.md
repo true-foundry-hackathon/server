@@ -113,13 +113,13 @@ Pushing commits to the `main` branch or triggering `workflow_dispatch` executes 
 
 ## Keeping this in sync
 
-`core/` and `bridge/` (plus `core/vox-connections/` and `core/vox-sms-schema/`, vendored because Railway's per-service build context can't reach sibling repos) are periodically re-synced from [vox-core](../vox-core) and [vox-bridge](../vox-bridge) with:
+`core/` and `bridge/` (plus `core/vox-connections/` and `core/vox-shared/`, vendored because Railway's per-service build context can't reach sibling repos) are periodically re-synced from [vox-core](../vox-core) and [vox-bridge](../vox-bridge) with:
 
 ```bash
 rsync -a --delete --exclude target --exclude .git --exclude .env --exclude '.env.*' vox-core/ vox-railway/core/
 rsync -a --delete --exclude target --exclude .git --exclude .env --exclude '.env.*' vox-bridge/ vox-railway/bridge/
 rsync -a --exclude target --exclude .git vox-connections/ vox-railway/core/vox-connections/
-rsync -a --exclude target --exclude .git vox-sms-schema/ vox-railway/core/vox-sms-schema/
+rsync -a --exclude target --exclude .git vox-shared/ vox-railway/core/vox-shared/
 ```
 
 run from the `vox/` parent directory. This intentionally excludes `.env*` (this repo's own env files, and Railway service settings, are the source of truth for secrets) and `Cargo.lock` isn't touched by the exclude pattern above being `.env.*`, so re-run `cargo generate-lockfile` (or `cargo check`) inside `core/` and `bridge/` after syncing if `Cargo.toml` changed, so the committed lock stays consistent with what `--locked` Docker builds expect. `core/Cargo.lock` in particular must be generated with **no ancestor `Cargo.toml` above `core/`** (e.g. from a copy of just `core/` outside this repo) — this repo's root `Cargo.toml` workspace is a local-dev convenience only (`cargo check --workspace` from the repo root), not what Railway/Docker actually build; `core/Cargo.lock` and `bridge/Cargo.lock` are the real, standalone locks used at deploy time, since each Railway service's build context is scoped to just that one subdirectory.
