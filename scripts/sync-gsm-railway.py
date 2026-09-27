@@ -40,24 +40,51 @@ RAILWAY_GRAPHQL_URL = "https://backboard.railway.com/graphql/v2"
 
 def run_graphql(token: str, query: str, variables: dict) -> dict:
     payload = json.dumps({"query": query, "variables": variables}).encode("utf-8")
-    req = urllib.request.Request(
-        RAILWAY_GRAPHQL_URL,
-        data=payload,
-        headers={
+    
+    # Railway accepts two authentication header styles:
+    # 1. 'Authorization: Bearer <token>' for Account/Workspace tokens
+    # 2. 'Project-Access-Token: <token>' for Project tokens
+    header_candidates = [
+        {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "User-Agent": "vox-gsm-railway-sync/1.0",
         },
-    )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            if "errors" in data:
-                raise RuntimeError(f"GraphQL Errors: {json.dumps(data['errors'])}")
-            return data.get("data", {})
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8")
-        raise RuntimeError(f"HTTP {e.code} Error: {error_body}") from e
+        {
+            "Project-Access-Token": token,
+            "Content-Type": "application/json",
+            "User-Agent": "vox-gsm-railway-sync/1.0",
+        },
+    ]
+
+    last_error = None
+    for headers in header_candidates:
+        req = urllib.request.Request(RAILWAY_GRAPHQL_URL, data=payload, headers=headers)
+        try:
+            with urllib.request.urlopen(req) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                if "errors" in data:
+                    err_msg = json.dumps(data["errors"])
+                    if "Not Authorized" in err_msg or "unauthorized" in err_msg.lower():
+                        last_error = RuntimeError(
+                            f"Railway API returned Not Authorized. "
+                            f"Ensure RAILWAY_TOKEN is an Account/Personal API token from "
+                            f"https://railway.com/account/tokens with write access to the project.\n"
+                            f"Raw error: {err_msg}"
+                        )
+                        continue
+                    raise RuntimeError(f"GraphQL Errors: {err_msg}")
+                return data.get("data", {})
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 403):
+                last_error = e
+                continue
+            error_body = e.read().decode("utf-8")
+            raise RuntimeError(f"HTTP {e.code} Error: {error_body}") from e
+
+    if last_error:
+        raise last_error
+    return {}
 
 
 def get_default_environment_id(token: str, project_id: str) -> str:
