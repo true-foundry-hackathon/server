@@ -7,7 +7,7 @@ Requires:
       GCP_PROJECT_ID
       RAILWAY_TOKEN
       RAILWAY_PROJECT_ID
-      RAILWAY_ENVIRONMENT_ID (optional; auto-detected if omitted)
+      RAILWAY_ENVIRONMENT_ID (optional; can be name like 'production' or UUID)
 """
 
 import json
@@ -17,8 +17,6 @@ import sys
 import urllib.request
 import urllib.error
 
-# List of secrets to sync: (GSM secret name, Railway shared variable name)
-# If GSM secret name is the same as Railway variable name, you can just map it 1:1.
 DEFAULT_SECRET_KEYS = [
     "VOX_AUTH_TOKEN",
     "DATABASE_URL",
@@ -41,9 +39,6 @@ RAILWAY_GRAPHQL_URL = "https://backboard.railway.com/graphql/v2"
 def run_graphql(token: str, query: str, variables: dict) -> dict:
     payload = json.dumps({"query": query, "variables": variables}).encode("utf-8")
     
-    # Railway accepts two authentication header styles:
-    # 1. 'Authorization: Bearer <token>' for Account/Workspace tokens
-    # 2. 'Project-Access-Token: <token>' for Project tokens
     header_candidates = [
         {
             "Authorization": f"Bearer {token}",
@@ -67,9 +62,7 @@ def run_graphql(token: str, query: str, variables: dict) -> dict:
                     err_msg = json.dumps(data["errors"])
                     if "Not Authorized" in err_msg or "unauthorized" in err_msg.lower():
                         last_error = RuntimeError(
-                            f"Railway API returned Not Authorized. "
-                            f"Ensure RAILWAY_TOKEN is an Account/Personal API token from "
-                            f"https://railway.com/account/tokens with write access to the project.\n"
+                            f"Railway API returned Not Authorized.\n"
                             f"Raw error: {err_msg}"
                         )
                         continue
@@ -87,10 +80,12 @@ def run_graphql(token: str, query: str, variables: dict) -> dict:
     return {}
 
 
-def get_default_environment_id(token: str, project_id: str) -> str:
+def resolve_railway_environment(token: str, project_id: str, requested_env: str | None) -> tuple[str, str]:
     query = """
     query GetProject($id: String!) {
       project(id: $id) {
+        id
+        name
         environments {
           edges {
             node {
@@ -103,17 +98,37 @@ def get_default_environment_id(token: str, project_id: str) -> str:
     }
     """
     data = run_graphql(token, query, {"id": project_id})
+    proj = data.get("project")
+    if not proj:
+        raise RuntimeError(
+            f"Project with ID '{project_id}' was not found or the provided token does not have access to it.\n"
+            f"Please verify RAILWAY_PROJECT_ID (copy Project ID from Railway project settings) "
+            f"and ensure your RAILWAY_TOKEN workspace scope includes this project."
+        )
+
+    proj_name = proj.get("name", "Unknown")
+    print(f"✓ Connected to Railway project: '{proj_name}' (ID: {proj.get('id')})")
+
     environments = [
-        edge["node"] for edge in data.get("project", {}).get("environments", {}).get("edges", [])
+        edge["node"] for edge in proj.get("environments", {}).get("edges", [])
     ]
     if not environments:
-        raise RuntimeError(f"No environments found for Railway project {project_id}")
+        raise RuntimeError(f"No environments found in Railway project '{proj_name}'.")
 
-    # Prefer 'production', otherwise pick the first environment
+    # If user provided an environment ID or name, match it
+    if requested_env:
+        for env in environments:
+            if env["id"] == requested_env or env["name"].lower() == requested_env.lower():
+                return env["id"], env["name"]
+        print(f"Warning: Specified environment '{requested_env}' not found among {[e['name'] for e in environments]}. Falling back to 'production'.")
+
+    # Match production environment
     for env in environments:
         if env["name"].lower() == "production":
-            return env["id"]
-    return environments[0]["id"]
+            return env["id"], env["name"]
+
+    # Otherwise return the first environment
+    return environments[0]["id"], environments[0]["name"]
 
 
 def fetch_gsm_secret(gcp_project: str, secret_name: str) -> str | None:
@@ -129,15 +144,13 @@ def fetch_gsm_secret(gcp_project: str, secret_name: str) -> str | None:
         ]
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
         return result.stdout.strip()
-    except subprocess.CalledProcessError as e:
-        # If secret does not exist or access denied
+    except subprocess.CalledProcessError:
         return None
 
 
 def upsert_railway_shared_variables(token: str, project_id: str, environment_id: str, variables: dict):
-    # Railway variableCollectionUpsert allows setting multiple variables at once
-    # Omitting serviceId sets them as Environment/Shared variables
-    mutation = """
+    # Try batch upsert first
+    batch_mutation = """
     mutation UpsertSharedVariables($input: VariableCollectionUpsertInput!) {
       variableCollectionUpsert(input: $input)
     }
@@ -150,14 +163,46 @@ def upsert_railway_shared_variables(token: str, project_id: str, environment_id:
             "replace": False,
         }
     }
-    run_graphql(token, mutation, payload)
+    try:
+        run_graphql(token, batch_mutation, payload)
+        print("✓ Successfully upserted all shared variables via batch API!")
+        return
+    except Exception as e:
+        print(f"Batch upsert failed ({e}). Falling back to single variable upsert...")
+
+    # Fallback: upsert one by one
+    single_mutation = """
+    mutation UpsertSingleVariable($input: VariableUpsertInput!) {
+      variableUpsert(input: $input)
+    }
+    """
+    success_count = 0
+    for name, value in variables.items():
+        single_payload = {
+            "input": {
+                "projectId": project_id,
+                "environmentId": environment_id,
+                "name": name,
+                "value": value,
+            }
+        }
+        try:
+            run_graphql(token, single_mutation, single_payload)
+            print(f"  ✓ Upserted {name}")
+            success_count += 1
+        except Exception as err:
+            print(f"  ✗ Failed to upsert {name}: {err}")
+
+    if success_count == 0:
+        raise RuntimeError("Failed to upsert any variables to Railway.")
+    print(f"✓ Completed: upserted {success_count}/{len(variables)} variables.")
 
 
 def main():
     gcp_project = os.environ.get("GCP_PROJECT_ID")
     railway_token = os.environ.get("RAILWAY_TOKEN")
     railway_project_id = os.environ.get("RAILWAY_PROJECT_ID")
-    railway_env_id = os.environ.get("RAILWAY_ENVIRONMENT_ID")
+    railway_env_input = os.environ.get("RAILWAY_ENVIRONMENT_ID")
 
     if not gcp_project:
         sys.exit("Error: GCP_PROJECT_ID environment variable is missing.")
@@ -166,24 +211,21 @@ def main():
     if not railway_project_id:
         sys.exit("Error: RAILWAY_PROJECT_ID environment variable is missing.")
 
-    if not railway_env_id:
-        print("RAILWAY_ENVIRONMENT_ID not provided. Auto-detecting production environment...")
-        railway_env_id = get_default_environment_id(railway_token, railway_project_id)
-        print(f"Target Environment ID: {railway_env_id}")
+    print("Verifying Railway project and resolving environment...")
+    env_id, env_name = resolve_railway_environment(railway_token, railway_project_id, railway_env_input)
+    print(f"Target Environment: '{env_name}' (ID: {env_id})")
 
-    # Check for custom comma-separated secret keys from env or fallback to defaults
     custom_keys_env = os.environ.get("SECRET_KEYS")
     keys_to_fetch = [k.strip() for k in custom_keys_env.split(",") if k.strip()] if custom_keys_env else DEFAULT_SECRET_KEYS
 
     collected_secrets = {}
-    print(f"Fetching secrets from Google Secret Manager (Project: {gcp_project})...")
+    print(f"\nFetching secrets from Google Secret Manager (Project: {gcp_project})...")
     for key in keys_to_fetch:
         val = fetch_gsm_secret(gcp_project, key)
         if val is not None:
             collected_secrets[key] = val
             print(f"  ✓ Fetched {key}")
         else:
-            # Check lowercase / kebab-case variant if uppercase not found (e.g. vox-auth-token)
             kebab_key = key.lower().replace("_", "-")
             val = fetch_gsm_secret(gcp_project, kebab_key)
             if val is not None:
@@ -196,9 +238,8 @@ def main():
         print("No secrets found to sync.")
         return
 
-    print(f"\nPushing {len(collected_secrets)} shared variable(s) to Railway project {railway_project_id}...")
-    upsert_railway_shared_variables(railway_token, railway_project_id, railway_env_id, collected_secrets)
-    print("✓ Successfully populated Railway shared variables!")
+    print(f"\nPushing {len(collected_secrets)} shared variable(s) to Railway environment '{env_name}'...")
+    upsert_railway_shared_variables(railway_token, railway_project_id, env_id, collected_secrets)
 
 
 if __name__ == "__main__":
