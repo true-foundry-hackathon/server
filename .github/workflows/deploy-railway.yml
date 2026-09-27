@@ -9,7 +9,7 @@ on:
 jobs:
   deploy:
     name: Deploy to Railway
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: "vox / production"
     steps:
       - name: Checkout repository
