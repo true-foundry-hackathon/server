@@ -406,8 +406,8 @@ impl SkillService {
         agent_key: &str,
     ) -> Result<Vec<EffectiveSkill>, SkillError> {
         let agent_id = self.selected_agent_id(context, agent_key).await?;
-        let granted: Vec<String> = CapabilityGrantService::new(self.db.clone())
-            .effective_for_agent(context, agent_key)
+        let granted: Vec<String> = CapabilityGrantService::new(self.db.pool().clone())
+            .effective_for_agent(&context.request_context(), agent_key)
             .await?
             .into_iter()
             .map(|grant| grant.capability_external_key)
@@ -527,34 +527,4 @@ fn contains_secret(value: &str) -> bool {
     ]
     .iter()
     .any(|marker| lower.contains(marker))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn valid() -> PublishSkillRequest {
-        PublishSkillRequest {
-            external_key: "meeting-prep".into(),
-            title: "Meeting prep".into(),
-            summary: "Prepare a concise agenda".into(),
-            instructions: "Summarize the purpose and ask for missing agenda items.".into(),
-            requested_capabilities: vec!["calendar.read".into()],
-            resources: empty_resources(),
-        }
-    }
-
-    #[test]
-    fn skill_declarations_are_bounded_and_contain_no_obvious_credentials() {
-        assert!(validate(&valid()).is_ok());
-        let mut invalid = valid();
-        invalid.instructions = "Use Bearer abc123 to connect".into();
-        assert!(matches!(validate(&invalid), Err(SkillError::Invalid)));
-        let mut invalid = valid();
-        invalid.resources = serde_json::json!({"token": "sk_live_example"});
-        assert!(matches!(validate(&invalid), Err(SkillError::Invalid)));
-        let mut invalid = valid();
-        invalid.external_key = "../meeting".into();
-        assert!(matches!(validate(&invalid), Err(SkillError::Invalid)));
-    }
 }

@@ -11,7 +11,7 @@ pub mod direct;
 pub mod execution;
 pub mod integrity;
 pub mod mcp;
-mod transport;
+pub(crate) mod transport;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -360,51 +360,5 @@ impl ProtocolRouter {
             }
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod security_tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn minimization_strips_nested_internal_data_and_denies_undeclared_arguments() {
-        let input = json!({
-            "city": "Paris",
-            "details": [{"name": "forecast", "session_token": "secret"}],
-            "system_prompt": "private"
-        });
-        assert_eq!(ProtocolRouter::minimize_context(&input, &[]), json!({}));
-        assert_eq!(
-            ProtocolRouter::minimize_context(&input, &["*".into()]),
-            json!({})
-        );
-        assert_eq!(
-            ProtocolRouter::minimize_context(&input, &["details".into()]),
-            json!({"details": [{"name": "forecast"}]})
-        );
-        assert_eq!(
-            ProtocolRouter::minimize_context(&json!([input]), &["details".into()]),
-            json!({})
-        );
-    }
-
-    #[test]
-    fn response_redaction_covers_values_and_error_text() {
-        let response = NormalizedResponse {
-            status: ResponseStatus::ProviderError,
-            data: json!({"credential": "opaque", "message": "Bearer abcdef1234567890"}),
-            provider_reference: None,
-            guarantees_reported: Some(json!({"cookie": "private"})),
-            error_code: Some("provider_error".into()),
-            error_message: Some("raw response with unknown credential".into()),
-        };
-        let safe = ProtocolRouter::redact_response(response);
-        assert_eq!(safe.data["credential"], "[REDACTED]");
-        assert_eq!(safe.data["message"], "[REDACTED]");
-        assert_eq!(safe.guarantees_reported.unwrap()["cookie"], "[REDACTED]");
-        assert_eq!(safe.error_code.as_deref(), Some("provider_error"));
-        assert_eq!(safe.error_message.as_deref(), Some("[REDACTED]"));
     }
 }

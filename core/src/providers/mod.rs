@@ -1,7 +1,8 @@
-pub mod amazon;
 pub mod expedia;
-pub mod uber;
-pub mod zomato;
+
+// Amazon/Uber/Zomato moved to the vox-connections crate; re-exported here so
+// existing `crate::providers::amazon::X` etc. call sites don't need to change.
+pub use vox_connections::providers::{amazon, uber, zomato};
 
 pub use amazon::{
     AMAZON_CAPABILITY_CATALOG_SEARCH, AMAZON_CAPABILITY_CATALOG_SEARCH_SHORT,

@@ -1,6 +1,8 @@
 [workspace]
 members = [
     "core",
+    "core/vox-connections",
+    "core/vox-sms-schema",
     "bridge",
 ]
 resolver = "2"

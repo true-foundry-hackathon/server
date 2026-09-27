@@ -4,6 +4,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
 COPY Cargo.toml Cargo.lock ./
+COPY vox-connections ./vox-connections
+COPY vox-sms-schema ./vox-sms-schema
 COPY migrations ./migrations
 COPY contracts ./contracts
 COPY services ./services

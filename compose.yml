@@ -22,9 +22,6 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       VOX_CORE_BIND_ADDRESS: 0.0.0.0:3001
       REDIS_URL: redis://redis:6379
-      TRUEFOUNDRY_GATEWAY_URL: ${TRUEFOUNDRY_GATEWAY_URL:-https://llm-gateway.truefoundry.cloud/api/inference/openai/v1}
-      TRUEFOUNDRY_API_KEY: ${TRUEFOUNDRY_API_KEY:-}
-      TRUEFOUNDRY_MODEL: ${TRUEFOUNDRY_MODEL:-gemini-2.5-flash}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
     expose:
@@ -48,9 +45,6 @@ services:
       VOX_CORE_BIND_ADDRESS: 0.0.0.0:3001
       VOX_BRIDGE_URL: http://bridge:3000
       REDIS_URL: redis://redis:6379
-      TRUEFOUNDRY_GATEWAY_URL: ${TRUEFOUNDRY_GATEWAY_URL:-https://llm-gateway.truefoundry.cloud/api/inference/openai/v1}
-      TRUEFOUNDRY_API_KEY: ${TRUEFOUNDRY_API_KEY:-}
-      TRUEFOUNDRY_MODEL: ${TRUEFOUNDRY_MODEL:-gemini-2.5-flash}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
     depends_on:
@@ -65,8 +59,8 @@ services:
     env_file: ${VOX_ENV_FILE:-.env}
     environment:
       VOX_CORE_URL: http://core-api:3001
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     depends_on:
       core-api:
         condition: service_healthy
@@ -75,6 +69,21 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
+
+  caddy:
+    build: ./caddy
+    restart: unless-stopped
+    environment:
+      PORT: 8080
+      CORE_API_UPSTREAM: core-api:3001
+      BRIDGE_UPSTREAM: bridge:3000
+    ports:
+      - "8080:8080"
+    depends_on:
+      core-api:
+        condition: service_healthy
+      bridge:
+        condition: service_healthy
 
 volumes:
   redis-data:

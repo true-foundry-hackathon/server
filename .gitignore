@@ -1,0 +1,12 @@
+target/
+.env
+.env.*
+!.env.example
+!*/.env.example
+
+# Root-level workspace lock is a local dev convenience only (lets
+# `cargo check --workspace` from the repo root cover everything at once).
+# It is NOT what Railway/Docker builds use -- those build core/ and bridge/
+# as standalone crates from their own committed Cargo.lock, since Railway's
+# build context for each service is scoped to that subdirectory.
+/Cargo.lock

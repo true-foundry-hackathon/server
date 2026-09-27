@@ -25,12 +25,16 @@ use crate::{router::build_api_router, state::ApiState};
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    let _traces = vox_core::telemetry::init("vox-core-api");
     let config = Config::from_env().expect("Vox Core configuration is invalid");
 
-    let db = Db::connect(&config.database_url)
-        .await
-        .expect("Vox Core database is unavailable");
+    let db = Db::connect_with_pool(
+        &config.database_url,
+        config.db_max_connections,
+        config.db_acquire_timeout_secs,
+    )
+    .await
+    .expect("Vox Core database is unavailable");
     db.migrate()
         .await
         .expect("Vox Core database migration failed");
@@ -43,8 +47,7 @@ async fn main() {
             .with_device_hub(device_hub.clone())
             .with_user_events(user_events.clone()),
     );
-    let redis_url = config.redis_url.as_deref().unwrap_or("redis://redis:6379");
-    let cache = RedisContextCache::new(redis_url)
+    let cache = RedisContextCache::new(&config.redis_url)
         .ok()
         .map(|c| Arc::new(c) as Arc<dyn ContextCache>);
     let memory = MemoryService::new(db.clone(), cache);
@@ -56,6 +59,10 @@ async fn main() {
         .jev_api_key
         .as_ref()
         .map(|k| vox_core::jev::JevClient::new(k.clone(), Some(config.jev_base_url.clone())));
+    let connected_apps = Arc::new(vox_core::connected_apps::ConnectedAppsService::from_config(
+        db.clone(),
+        &config,
+    ));
     let mut legacy_state = AppState::with_memory_and_jev(
         db.clone(),
         agent,
@@ -63,8 +70,9 @@ async fn main() {
         config.service_token,
         jev_client,
     );
+    legacy_state = legacy_state.with_connected_apps(connected_apps);
     if let Some(admin) = vox_core::http::admin::RedisAdmin::from_token_with_url(
-        config.redis_url.as_deref().or(Some("redis://redis:6379")),
+        Some(config.redis_url.as_str()),
         std::env::var("VOX_ADMIN_TOKEN").ok(),
     )
     .expect("Vox admin Redis URL is invalid")

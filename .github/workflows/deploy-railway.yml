@@ -34,3 +34,9 @@ jobs:
         working-directory: bridge
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Deploy Caddy
+        run: railway up --service "${{ secrets.RAILWAY_SERVICE_CADDY || 'caddy' }}" --detach
+        working-directory: caddy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
